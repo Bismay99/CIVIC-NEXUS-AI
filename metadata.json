@@ -1,0 +1,8 @@
+{
+  "name": "Civic Nexus AI",
+  "description": "Smart civic governance and AI incident management platform for citizens and emergency response.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
