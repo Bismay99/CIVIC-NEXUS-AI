@@ -42,6 +42,9 @@ fun ComplaintsScreen(
     val searchQuery by viewModel.complaintSearchQuery.collectAsState()
 
     var selectedComplaintDetail by remember { mutableStateOf<Complaint?>(null) }
+    var complaintToReopen by remember { mutableStateOf<Complaint?>(null) }
+    var reopenFeedbackText by remember { mutableStateOf("") }
+    var isReopening by remember { mutableStateOf(false) }
 
     val filteredComplaints = remember(complaints, statusFilter, searchQuery) {
         complaints.filter { comp ->
@@ -59,7 +62,7 @@ fun ComplaintsScreen(
             .fillMaxSize()
             .background(civicColors.background)
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // Header
@@ -295,15 +298,104 @@ fun ComplaintsScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = { selectedComplaintDetail = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = civicColors.accentTeal)
-                ) {
-                    Text("Close", color = Color.White, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (comp.status == ComplaintStatus.RESOLVED) {
+                        OutlinedButton(
+                            onClick = {
+                                complaintToReopen = comp
+                                reopenFeedbackText = ""
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PriorityCritical),
+                            border = CardDefaults.outlinedCardBorder().copy(
+                                brush = androidx.compose.ui.graphics.SolidColor(PriorityCritical.copy(alpha = 0.5f))
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Reopen Grievance", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                    Button(
+                        onClick = { selectedComplaintDetail = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = civicColors.accentTeal),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Close", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
                 }
             },
             containerColor = civicColors.surface,
             shape = RoundedCornerShape(18.dp)
+        )
+    }
+
+    // Reopen Confirmation Dialog
+    complaintToReopen?.let { comp ->
+        AlertDialog(
+            onDismissRequest = { if (!isReopening) complaintToReopen = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.WarningAmber, contentDescription = null, tint = PriorityCritical)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Reopen Complaint ${comp.referenceId}",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = civicColors.textPrimary
+                    )
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Please describe why this issue requires further municipal remediation (e.g., recurrence, incomplete fix, residual hazard):",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = civicColors.textSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = reopenFeedbackText,
+                        onValueChange = { reopenFeedbackText = it },
+                        placeholder = { Text("e.g. Road surface caved in again after rain...", color = civicColors.textMuted) },
+                        modifier = Modifier.fillMaxWidth().height(100.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = civicColors.accentTeal,
+                            unfocusedBorderColor = civicColors.inputBorder,
+                            focusedTextColor = civicColors.textPrimary,
+                            unfocusedTextColor = civicColors.textPrimary
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isReopening = true
+                        viewModel.reopenComplaint(comp.referenceId, reopenFeedbackText) {
+                            isReopening = false
+                            complaintToReopen = null
+                            selectedComplaintDetail = null
+                        }
+                    },
+                    enabled = !isReopening,
+                    colors = ButtonDefaults.buttonColors(containerColor = PriorityCritical),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    if (isReopening) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Submit Escalation", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { complaintToReopen = null }) {
+                    Text("Cancel", color = civicColors.textSecondary)
+                }
+            },
+            containerColor = civicColors.surface,
+            shape = RoundedCornerShape(16.dp)
         )
     }
 }
@@ -320,6 +412,7 @@ private fun ComplaintCard(
         ComplaintStatus.ASSIGNED -> StatusAssigned
         ComplaintStatus.IN_PROGRESS -> StatusInProgress
         ComplaintStatus.RESOLVED -> StatusResolved
+        ComplaintStatus.REOPENED -> StatusSubmitted
     }
 
     Card(

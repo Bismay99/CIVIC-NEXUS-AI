@@ -35,14 +35,18 @@ data class CivicCustomColors(
     val chipBorder: Color,
     val topBarBackground: Color,
     val bottomBarBackground: Color,
-    val dividerColor: Color
+    val dividerColor: Color,
+    val glassSurface: Color = if (isDark) Color(0xFF132238).copy(alpha = 0.82f) else Color.White.copy(alpha = 0.86f),
+    val glassBorder: Color = if (isDark) Color(0xFF263550) else Color(0xFFE2E8F0),
+    val glassSpecular: Color = if (isDark) Color(0xFF38BDF8).copy(alpha = 0.35f) else Color.White.copy(alpha = 0.95f),
+    val glassShadow: Color = if (isDark) Color(0xFF000000).copy(alpha = 0.35f) else Color(0xFF0F172A).copy(alpha = 0.06f)
 )
 
 val CivicDarkCustomColors = CivicCustomColors(
     isDark = true,
     background = Color(0xFF080E1E),
     surface = Color(0xFF0F172A),
-    cardContainer = Color(0xFF162238),
+    cardContainer = Color(0xFF132238).copy(alpha = 0.82f),
     cardBorder = Color(0xFF263550),
     surfaceVariant = Color(0xFF1E293B),
     textPrimary = Color(0xFFFFFFFF),
@@ -52,20 +56,24 @@ val CivicDarkCustomColors = CivicCustomColors(
     accentTealBright = Color(0xFF2DD4BF),
     accentCyan = Color(0xFF38BDF8),
     accentBlue = Color(0xFF3B82F6),
-    inputBackground = Color(0xFF162238),
+    inputBackground = Color(0xFF162238).copy(alpha = 0.80f),
     inputBorder = Color(0xFF263550),
-    chipBackground = Color(0xFF1E293B),
+    chipBackground = Color(0xFF1E293B).copy(alpha = 0.80f),
     chipBorder = Color(0xFF263550),
-    topBarBackground = Color(0xFF0F172A),
-    bottomBarBackground = Color(0xFF0F172A),
-    dividerColor = Color(0xFF263550)
+    topBarBackground = Color(0xFF0B132B).copy(alpha = 0.85f),
+    bottomBarBackground = Color(0xFF0B132B).copy(alpha = 0.85f),
+    dividerColor = Color(0xFF263550),
+    glassSurface = Color(0xFF132238).copy(alpha = 0.82f),
+    glassBorder = Color(0xFF263550),
+    glassSpecular = Color(0xFF38BDF8).copy(alpha = 0.35f),
+    glassShadow = Color(0xFF000000).copy(alpha = 0.35f)
 )
 
 val CivicLightCustomColors = CivicCustomColors(
     isDark = false,
     background = Color(0xFFF8FAFC),
     surface = Color(0xFFFFFFFF),
-    cardContainer = Color(0xFFFFFFFF),
+    cardContainer = Color.White.copy(alpha = 0.86f),
     cardBorder = Color(0xFFE2E8F0),
     surfaceVariant = Color(0xFFF1F5F9),
     textPrimary = Color(0xFF0F172A),
@@ -75,13 +83,17 @@ val CivicLightCustomColors = CivicCustomColors(
     accentTealBright = Color(0xFF0F766E),
     accentCyan = Color(0xFF0284C7),
     accentBlue = Color(0xFF2563EB),
-    inputBackground = Color(0xFFFFFFFF),
+    inputBackground = Color.White.copy(alpha = 0.88f),
     inputBorder = Color(0xFFCBD5E1),
-    chipBackground = Color(0xFFF1F5F9),
+    chipBackground = Color(0xFFF1F5F9).copy(alpha = 0.85f),
     chipBorder = Color(0xFFE2E8F0),
-    topBarBackground = Color(0xFFFFFFFF),
-    bottomBarBackground = Color(0xFFFFFFFF),
-    dividerColor = Color(0xFFE2E8F0)
+    topBarBackground = Color.White.copy(alpha = 0.88f),
+    bottomBarBackground = Color.White.copy(alpha = 0.88f),
+    dividerColor = Color(0xFFE2E8F0),
+    glassSurface = Color.White.copy(alpha = 0.86f),
+    glassBorder = Color(0xFFE2E8F0),
+    glassSpecular = Color.White.copy(alpha = 0.95f),
+    glassShadow = Color(0xFF0F172A).copy(alpha = 0.06f)
 )
 
 val LocalCivicCustomColors = staticCompositionLocalOf {

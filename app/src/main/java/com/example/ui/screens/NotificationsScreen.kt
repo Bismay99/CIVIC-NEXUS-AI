@@ -41,7 +41,7 @@ fun NotificationsScreen(
             .fillMaxSize()
             .background(civicColors.background)
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Header

@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions for authorization
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.role == 'admin' ||
+         request.auth.token.email.matches('.*@admin\\.civicnexus\\.gov\\.in'));
+    }
+
+    // Global Complaints Collection
+    match /complaints/{complaintId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || (
+        isAuthenticated() &&
+        (
+          // Citizen allowed to reopen their own complaint or add citizen feedback
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastNote', 'updatedAt', 'timelineJson'])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // User-scoped complaints
+    match /users/{userId}/complaints/{complaintId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // City incidents & community verifications
+    match /incidents/{incidentId} {
+      allow read: if isAuthenticated();
+      // Allow community confirmation / upvoting
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verifiedCount'])
+      );
+      allow create, delete: if isAdmin();
+    }
+
+    // Public municipal facilities
+    match /facilities/{facilityId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Default catch-all denies unauthorized access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

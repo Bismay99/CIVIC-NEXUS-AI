@@ -28,6 +28,7 @@ import com.example.model.CitizenProfile
 import com.example.ui.CivicNexusViewModel
 import com.example.ui.SubScreen
 import com.example.ui.theme.*
+import com.example.util.AppLanguage
 
 @Composable
 fun ProfileScreen(
@@ -37,6 +38,7 @@ fun ProfileScreen(
     val civicColors = MaterialTheme.civicColors
     val profile by viewModel.profile.collectAsState()
     val currentThemeMode by viewModel.themeMode.collectAsState()
+    val currentLanguage by viewModel.currentLanguage.collectAsState()
     val isGeminiConfigured = viewModel.isGeminiConfigured
 
     var pushNotifsEnabled by remember { mutableStateOf(true) }
@@ -51,7 +53,7 @@ fun ProfileScreen(
             .fillMaxSize()
             .background(civicColors.background)
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Header
@@ -325,6 +327,87 @@ fun ProfileScreen(
                                     color = civicColors.dividerColor,
                                     modifier = Modifier.padding(vertical = 4.dp)
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Language & Regional Localization
+        item {
+            Column {
+                Text(
+                    text = "Language & Regional Localization",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = civicColors.textPrimary
+                )
+                Text(
+                    text = "Select preferred interface language (English, Odia, Hindi)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = civicColors.textMuted
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = civicColors.cardContainer),
+                    shape = RoundedCornerShape(14.dp),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = androidx.compose.ui.graphics.SolidColor(civicColors.cardBorder)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        AppLanguage.entries.forEachIndexed { idx, lang ->
+                            val isSelected = currentLanguage == lang
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { viewModel.setLanguage(lang) }
+                                    .padding(horizontal = 8.dp, vertical = 10.dp)
+                                    .testTag("language_option_${lang.code}"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Translate,
+                                        contentDescription = null,
+                                        tint = if (isSelected) civicColors.accentTeal else civicColors.textSecondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = lang.displayName,
+                                            style = MaterialTheme.typography.bodyLarge.copy(
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                            ),
+                                            color = civicColors.textPrimary
+                                        )
+                                        Text(
+                                            text = when (lang) {
+                                                AppLanguage.ENGLISH -> "Default official municipal language"
+                                                AppLanguage.ODIA -> "ରାଜ୍ୟ ସରକାରୀ ଭାଷା (State official language)"
+                                                AppLanguage.HINDI -> "राष्ट्रीय संपर्क भाषा (National link language)"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = civicColors.textMuted
+                                        )
+                                    }
+                                }
+
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = { viewModel.setLanguage(lang) },
+                                    colors = RadioButtonDefaults.colors(
+                                        selectedColor = civicColors.accentTeal,
+                                        unselectedColor = civicColors.textMuted
+                                    )
+                                )
+                            }
+                            if (idx < AppLanguage.entries.lastIndex) {
+                                HorizontalDivider(color = civicColors.dividerColor, modifier = Modifier.padding(vertical = 4.dp))
                             }
                         }
                     }

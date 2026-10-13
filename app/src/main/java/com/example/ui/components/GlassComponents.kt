@@ -12,13 +12,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -37,8 +37,8 @@ import com.example.ui.theme.civicColors
 
 /**
  * Civic Nexus Glassmorphism Design System:
- * - Light Mode: Premium Frosted Glass (Soft misty translucency, fine borders, ambient light)
- * - Dark Mode: Midnight Glass (Deep navy/charcoal translucency, subtle glow, visible edge borders)
+ * - Light Mode: Premium Frosted Glass (Soft cool-blue mist, controlled translucency, fine top illumination, soft ambient shadows)
+ * - Dark Mode: Midnight Glass (Layered navy-slate translucency, fine illuminated border, gentle specular reflection)
  */
 
 val DefaultGlassCornerRadius = 16.dp
@@ -46,7 +46,7 @@ val DefaultGlassBorderWidth = 1.dp
 
 /**
  * Modifier extension to safely apply background blur on supported Android API levels (>= 31).
- * On older devices, the translucent tint provides graceful visual fallback without performance penalty.
+ * On older devices, the translucent tint provides a graceful visual fallback without performance penalty.
  */
 fun Modifier.glassmorphicBlur(radius: Dp = 16.dp): Modifier {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -57,40 +57,52 @@ fun Modifier.glassmorphicBlur(radius: Dp = 16.dp): Modifier {
 }
 
 /**
- * GlassSurface provides the base frosted glass layer with subtle gradient shimmer,
- * translucent fill, fine border, and controlled shadow.
+ * GlassSurface provides the base frosted glass layer with subtle specular edge highlights,
+ * translucent fill, fine gradient border, and controlled ambient shadow.
  */
 @Composable
 fun GlassSurface(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(DefaultGlassCornerRadius),
+    backgroundColor: Color? = null,
+    backgroundAlpha: Float? = null,
     borderWidth: Dp = DefaultGlassBorderWidth,
+    borderColor: Color? = null,
+    borderBrush: Brush? = null,
     elevation: Dp = 0.dp,
+    specularHighlight: Boolean = true,
     content: @Composable BoxScope.() -> Unit
 ) {
     val civicColors = MaterialTheme.civicColors
     val isDark = civicColors.isDark
 
-    // Glass fill tint
-    val glassFillColor = if (isDark) {
-        civicColors.cardContainer.copy(alpha = 0.78f)
+    // Base glass fill with controlled translucency
+    val defaultFill = if (isDark) {
+        civicColors.glassSurface
     } else {
-        Color.White.copy(alpha = 0.82f)
+        Color.White.copy(alpha = 0.86f)
     }
 
-    // Elegant specular gradient border for frosted depth
-    val borderBrush = Brush.linearGradient(
+    val glassFillColor = when {
+        backgroundColor != null && backgroundAlpha != null -> backgroundColor.copy(alpha = backgroundAlpha)
+        backgroundColor != null -> backgroundColor
+        backgroundAlpha != null -> defaultFill.copy(alpha = backgroundAlpha)
+        else -> defaultFill
+    }
+
+    // Refined specular gradient border for physical frosted glass refraction
+    val resolvedBorderBrush = borderBrush ?: Brush.verticalGradient(
         colors = if (isDark) {
             listOf(
-                civicColors.accentTeal.copy(alpha = 0.35f),
-                civicColors.cardBorder.copy(alpha = 0.60f),
-                civicColors.accentBlue.copy(alpha = 0.20f)
+                civicColors.glassSpecular,
+                (borderColor ?: civicColors.glassBorder).copy(alpha = 0.70f),
+                (borderColor ?: civicColors.glassBorder).copy(alpha = 0.40f)
             )
         } else {
             listOf(
-                Color.White.copy(alpha = 0.95f),
-                civicColors.cardBorder.copy(alpha = 0.50f),
-                civicColors.accentCyan.copy(alpha = 0.25f)
+                civicColors.glassSpecular,
+                (borderColor ?: civicColors.glassBorder).copy(alpha = 0.65f),
+                (borderColor ?: civicColors.glassBorder).copy(alpha = 0.40f)
             )
         }
     )
@@ -102,21 +114,48 @@ fun GlassSurface(
                     Modifier.shadow(
                         elevation = elevation,
                         shape = shape,
-                        ambientColor = if (isDark) Color(0xFF0F172A).copy(alpha = 0.4f) else Color(0xFF64748B).copy(alpha = 0.12f),
-                        spotColor = if (isDark) civicColors.accentTeal.copy(alpha = 0.15f) else Color(0xFF0F172A).copy(alpha = 0.08f)
+                        ambientColor = civicColors.glassShadow,
+                        spotColor = if (isDark) civicColors.accentTeal.copy(alpha = 0.12f) else civicColors.accentCyan.copy(alpha = 0.08f)
                     )
                 } else Modifier
             )
             .clip(shape)
             .background(glassFillColor)
-            .border(width = borderWidth, brush = borderBrush, shape = shape),
-        content = content
-    )
+            .border(width = borderWidth, brush = resolvedBorderBrush, shape = shape)
+    ) {
+        // Specular top hairline reflection for frosted glass depth
+        if (specularHighlight) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = if (isDark) {
+                                listOf(
+                                    civicColors.accentCyan.copy(alpha = 0.05f),
+                                    civicColors.accentCyan.copy(alpha = 0.30f),
+                                    civicColors.accentTeal.copy(alpha = 0.05f)
+                                )
+                            } else {
+                                listOf(
+                                    Color.White.copy(alpha = 0.20f),
+                                    Color.White.copy(alpha = 0.85f),
+                                    Color.White.copy(alpha = 0.20f)
+                                )
+                            }
+                        )
+                    )
+            )
+        }
+
+        content()
+    }
 }
 
 /**
  * GlassCard wraps content in an elevated frosted glass panel with consistent padding
- * and optional click handling.
+ * and optional click handling with ripple feedback.
  */
 @Composable
 fun GlassCard(
@@ -124,19 +163,42 @@ fun GlassCard(
     shape: Shape = RoundedCornerShape(DefaultGlassCornerRadius),
     onClick: (() -> Unit)? = null,
     elevation: Dp = 2.dp,
+    backgroundColor: Color? = null,
+    backgroundAlpha: Float? = null,
+    borderWidth: Dp = DefaultGlassBorderWidth,
+    borderColor: Color? = null,
+    borderBrush: Brush? = null,
     contentPadding: PaddingValues = PaddingValues(16.dp),
+    testTag: String? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val clickableModifier = if (onClick != null) {
-        Modifier.clickable(onClick = onClick)
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = ripple(),
+            onClick = onClick
+        )
+    } else {
+        Modifier
+    }
+
+    val tagModifier = if (testTag != null) {
+        Modifier.testTag(testTag)
     } else {
         Modifier
     }
 
     GlassSurface(
-        modifier = modifier.then(clickableModifier),
+        modifier = modifier
+            .then(tagModifier)
+            .then(clickableModifier),
         shape = shape,
-        elevation = elevation
+        elevation = elevation,
+        backgroundColor = backgroundColor,
+        backgroundAlpha = backgroundAlpha,
+        borderWidth = borderWidth,
+        borderColor = borderColor,
+        borderBrush = borderBrush
     ) {
         Column(
             modifier = Modifier
@@ -149,7 +211,7 @@ fun GlassCard(
 
 /**
  * GlassButton provides a tactile, luminous glass action button with accessible contrast,
- * fine edge highlights, and filled or outlined variants.
+ * minimum 48dp touch target, fine edge highlights, and filled or outlined variants.
  */
 @Composable
 fun GlassButton(
@@ -200,8 +262,8 @@ fun GlassButton(
             width = 1.dp,
             brush = Brush.horizontalGradient(
                 colors = listOf(
-                    Color.White.copy(alpha = 0.4f),
-                    civicColors.accentTealBright.copy(alpha = 0.6f)
+                    Color.White.copy(alpha = 0.45f),
+                    civicColors.accentTealBright.copy(alpha = 0.65f)
                 )
             ),
             shape = buttonShape
@@ -211,15 +273,22 @@ fun GlassButton(
     Box(
         modifier = modifier
             .testTag(testTag)
+            .defaultMinSize(minHeight = 48.dp, minWidth = 48.dp)
             .shadow(
                 elevation = if (isPrimary) 3.dp else 1.dp,
                 shape = buttonShape,
+                ambientColor = civicColors.glassShadow,
                 spotColor = if (isPrimary) civicColors.accentTeal.copy(alpha = 0.35f) else Color.Transparent
             )
             .clip(buttonShape)
             .background(backgroundBrush)
             .then(borderModifier)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(),
+                onClick = onClick
+            )
             .padding(horizontal = 18.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -274,24 +343,29 @@ fun GlassTextField(
     val civicColors = MaterialTheme.civicColors
     val isDark = civicColors.isDark
 
+    var isFocused by remember { mutableStateOf(false) }
+
     val inputShape = RoundedCornerShape(12.dp)
     val inputBg = if (isDark) {
-        civicColors.inputBackground.copy(alpha = 0.75f)
+        civicColors.inputBackground.copy(alpha = 0.78f)
     } else {
-        Color.White.copy(alpha = 0.85f)
+        Color.White.copy(alpha = 0.90f)
     }
 
     val borderColor = when {
         isError -> MaterialTheme.colorScheme.error
-        else -> civicColors.inputBorder.copy(alpha = 0.8f)
+        isFocused -> civicColors.accentTeal
+        else -> civicColors.inputBorder.copy(alpha = 0.75f)
     }
+
+    val borderWidth = if (isFocused || isError) 1.5.dp else 1.dp
 
     Column(modifier = modifier) {
         if (!label.isNullOrBlank()) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-                color = civicColors.textSecondary,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = if (isError) MaterialTheme.colorScheme.error else civicColors.textSecondary,
                 modifier = Modifier.padding(bottom = 6.dp, start = 2.dp)
             )
         }
@@ -302,10 +376,12 @@ fun GlassTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(testTag)
+                .defaultMinSize(minHeight = 48.dp)
+                .onFocusChanged { isFocused = it.isFocused }
                 .clip(inputShape)
                 .background(inputBg)
                 .border(
-                    width = 1.dp,
+                    width = borderWidth,
                     color = borderColor,
                     shape = inputShape
                 )
@@ -331,7 +407,11 @@ fun GlassTextField(
                         Icon(
                             imageVector = leadingIcon,
                             contentDescription = null,
-                            tint = if (isError) MaterialTheme.colorScheme.error else civicColors.accentTeal,
+                            tint = when {
+                                isError -> MaterialTheme.colorScheme.error
+                                isFocused -> civicColors.accentTeal
+                                else -> civicColors.accentTeal.copy(alpha = 0.8f)
+                            },
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -369,7 +449,7 @@ fun GlassTextField(
 
 /**
  * GlassDialog presents an alert or confirmation in a frosted glass modal container
- * with soft backdrop blur and crisp edge border.
+ * with soft backdrop blur, fine edge illumination, and accessible actions.
  */
 @Composable
 fun GlassDialog(
@@ -391,7 +471,8 @@ fun GlassDialog(
                 .fillMaxWidth()
                 .padding(16.dp),
             shape = RoundedCornerShape(20.dp),
-            elevation = 8.dp
+            elevation = 8.dp,
+            specularHighlight = true
         ) {
             Column(
                 modifier = Modifier
@@ -405,7 +486,7 @@ fun GlassDialog(
                     if (icon != null) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(38.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(civicColors.accentTeal.copy(alpha = 0.18f)),
                             contentAlignment = Alignment.Center
@@ -454,8 +535,11 @@ fun GlassSectionHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // Subtle glowing teal indicator pill
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f, fill = false)
+        ) {
+            // Glowing teal indicator pill
             Box(
                 modifier = Modifier
                     .size(width = 4.dp, height = 16.dp)
@@ -489,7 +573,11 @@ fun GlassSectionHeader(
                 color = civicColors.accentTeal,
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
-                    .clickable(onClick = onActionClick)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = ripple(),
+                        onClick = onActionClick
+                    )
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             )
         }

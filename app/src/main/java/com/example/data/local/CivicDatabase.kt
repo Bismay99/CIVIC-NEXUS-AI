@@ -6,8 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [ComplaintEntity::class],
-    version = 1,
+    entities = [ComplaintEntity::class, ComplaintDraftEntity::class],
+    version = 2,
     exportSchema = false
 )
 abstract class CivicDatabase : RoomDatabase() {

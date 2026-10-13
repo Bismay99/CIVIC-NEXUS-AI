@@ -5,10 +5,13 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.CivicRepository
+import com.example.data.local.ComplaintDraftEntity
 import com.example.model.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 sealed class SubScreen {
@@ -95,6 +98,19 @@ class CivicNexusViewModel(
 
     val isGeminiConfigured = repository.isGeminiOnline()
 
+    // Localization
+    val currentLanguage = repository.currentLanguage
+    fun setLanguage(language: com.example.util.AppLanguage) {
+        repository.setLanguage(language)
+    }
+
+    // Active Offline Draft
+    val activeDraft: StateFlow<ComplaintDraftEntity?> = repository.activeDraft.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
+
     // Map Screen Filter & Selection
     private val _mapCategoryFilter = MutableStateFlow<IncidentCategory?>(null)
     val mapCategoryFilter: StateFlow<IncidentCategory?> = _mapCategoryFilter.asStateFlow()
@@ -124,8 +140,11 @@ class CivicNexusViewModel(
     private val _reportLongitude = MutableStateFlow(85.8172)
     val reportLongitude: StateFlow<Double> = _reportLongitude.asStateFlow()
 
-    private val _reportHasPhoto = MutableStateFlow(true)
+    private val _reportHasPhoto = MutableStateFlow(false)
     val reportHasPhoto: StateFlow<Boolean> = _reportHasPhoto.asStateFlow()
+
+    private val _reportPhotoUri = MutableStateFlow<String?>(null)
+    val reportPhotoUri: StateFlow<String?> = _reportPhotoUri.asStateFlow()
 
     private val _reportAiAnalysis = MutableStateFlow<AiAnalysisResult?>(null)
     val reportAiAnalysis: StateFlow<AiAnalysisResult?> = _reportAiAnalysis.asStateFlow()
@@ -141,6 +160,11 @@ class CivicNexusViewModel(
 
     private val _lastSubmittedComplaint = MutableStateFlow<Complaint?>(null)
     val lastSubmittedComplaint: StateFlow<Complaint?> = _lastSubmittedComplaint.asStateFlow()
+
+    fun setReportPhotoUri(uri: String?) {
+        _reportPhotoUri.value = uri
+        _reportHasPhoto.value = !uri.isNullOrBlank()
+    }
 
     // Complaints Tab Filter
     private val _complaintStatusFilter = MutableStateFlow<ComplaintStatus?>(null)
@@ -302,9 +326,52 @@ class CivicNexusViewModel(
         _lastSubmittedComplaint.value = null
     }
 
-    // Incidents & Upvoting
-    fun upvoteIncident(incidentId: String) {
-        repository.upvoteIncident(incidentId)
+    // Draft Management
+    fun saveDraft() {
+        viewModelScope.launch {
+            repository.saveDraft(
+                title = _reportTitle.value,
+                description = _reportDescription.value,
+                category = _reportCategory.value.displayName,
+                address = _reportAddress.value,
+                latitude = _reportLatitude.value,
+                longitude = _reportLongitude.value,
+                hasPhoto = _reportHasPhoto.value,
+                photoUri = _reportPhotoUri.value ?: ""
+            )
+        }
+    }
+
+    fun restoreDraft(draft: com.example.data.local.ComplaintDraftEntity) {
+        _reportTitle.value = draft.title
+        _reportDescription.value = draft.description
+        _reportCategory.value = IncidentCategory.fromDisplayName(draft.category)
+        _reportAddress.value = draft.address
+        _reportLatitude.value = draft.latitude
+        _reportLongitude.value = draft.longitude
+        _reportHasPhoto.value = draft.hasPhoto
+        _reportPhotoUri.value = draft.photoUri.ifBlank { null }
+    }
+
+    fun discardDraft() {
+        viewModelScope.launch {
+            repository.clearDraft()
+        }
+    }
+
+    // Incidents & Upvoting with restrictions
+    fun hasUpvotedIncident(incidentId: String): Boolean = repository.hasUpvoted(incidentId)
+
+    fun upvoteIncident(incidentId: String): Boolean {
+        return repository.upvoteIncident(incidentId)
+    }
+
+    // Complaint Reopening Workflow
+    fun reopenComplaint(referenceId: String, reason: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = repository.reopenComplaint(referenceId, reason)
+            onComplete(result.isSuccess)
+        }
     }
 
     // Assistant Chat

@@ -1,0 +1,57 @@
+<resources>
+    <string name="app_name">Civic Nexus AI</string>
+    <string name="tagline">स्मार्ट सिटी नर्वस सिस्टम • नागरिक प्रशासन ग्रिड</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">होम</string>
+    <string name="nav_explore">एक्सप्लोर</string>
+    <string name="nav_complaints">मेरी शिकायतें</string>
+    <string name="nav_notifications">सूचनाएं</string>
+    <string name="nav_profile">प्रोफ़ाइल</string>
+
+    <!-- Home Actions & Sections -->
+    <string name="welcome_prefix">नमस्ते,</string>
+    <string name="civic_motto">एआई-संचालित नागरिक प्रशासन के साथ सशक्त नागरिक</string>
+    <string name="quick_actions">त्वरित कार्य</string>
+    <string name="action_report_issue">समस्या दर्ज करें</string>
+    <string name="action_explore_nearby">आस-पास देखें</string>
+    <string name="action_my_complaints">मेरी शिकायतें</string>
+    <string name="action_emergency_sos">आपातकालीन एसओएस</string>
+    <string name="stat_total_reports">कुल रिपोर्ट</string>
+    <string name="stat_active_issues">सक्रिय मुद्दे</string>
+    <string name="stat_resolved_issues">हल किए गए</string>
+    <string name="stat_under_review">समीक्षाधीन</string>
+    <string name="recent_activity">हालिया गतिविधि</string>
+    <string name="nearby_civic_issues">आस-पास की नागरिक समस्याएं</string>
+    <string name="community_impact">सामुदायिक प्रभाव</string>
+
+    <!-- Complaint Categories -->
+    <string name="cat_potholes">सड़कें और गड्ढे</string>
+    <string name="cat_garbage">कचरा और स्वच्छता</string>
+    <string name="cat_flooding">जल निकासी और बाढ़</string>
+    <string name="cat_fire">आग और खतरा</string>
+    <string name="cat_traffic">यातायात जाम</string>
+    <string name="cat_streetlights">स्ट्रीट लाइट</string>
+    <string name="cat_water">जल आपूर्ति</string>
+    <string name="cat_other">अन्य नागरिक समस्या</string>
+
+    <!-- Statuses -->
+    <string name="status_submitted">दर्ज की गई</string>
+    <string name="status_under_review">समीक्षाधीन</string>
+    <string name="status_assigned">अधिकारी नियुक्त</string>
+    <string name="status_in_progress">प्रगति पर</string>
+    <string name="status_resolved">समाधान हुआ</string>
+    <string name="status_reopened">पुनः खोला गया</string>
+
+    <!-- Common Buttons -->
+    <string name="btn_submit">शिकायत भेजें</string>
+    <string name="btn_save_draft">ड्राफ्ट सहेजें</string>
+    <string name="btn_discard_draft">ड्राफ्ट हटाएं</string>
+    <string name="btn_ai_assist">एआई सहायता</string>
+    <string name="btn_use_location">वर्तमान स्थान का उपयोग करें</string>
+    <string name="btn_take_photo">फोटो लें</string>
+    <string name="btn_choose_gallery">गैलरी से चुनें</string>
+    <string name="btn_voice_input">वॉयस इनपुट</string>
+    <string name="btn_upvote_confirm">समस्या की पुष्टि करें</string>
+    <string name="btn_reopen">पुनः खोलने का अनुरोध</string>
+</resources>

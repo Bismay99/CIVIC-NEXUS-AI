@@ -2,6 +2,7 @@ package com.example.data.ai
 
 import com.example.BuildConfig
 import com.example.model.AiAnalysisResult
+import com.example.model.AiDraftSuggestion
 import com.example.model.IncidentCategory
 import com.example.model.IncidentSeverity
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +93,44 @@ class GeminiAiService {
         }
 
         return@withContext Pair(generateOfflineResponse(userPrompt), false)
+    }
+
+    suspend fun improveComplaintDraft(
+        draftText: String,
+        category: String?
+    ): AiDraftSuggestion = withContext(Dispatchers.IO) {
+        val prompt = """
+            You are Civic Nexus AI, assisting a citizen in writing an official municipal civic complaint.
+            Input text: "$draftText"
+            Selected Category: "${category ?: "Unknown"}"
+
+            Task:
+            1. Suggest a clear, concise, professional title (under 8 words).
+            2. Rewrite the complaint into a professional, grammatically clear, well-structured description.
+            3. Suggest the most appropriate category among: ["Potholes & Roads", "Garbage & Waste", "Flooding & Drainage", "Fire & Hazard", "Traffic Congestion", "Broken Streetlights", "Water Pipe Burst", "Other Civic Issue"]
+            4. Suggest a priority level ["Critical", "High", "Medium", "Low"] with a brief 1-sentence engineering justification.
+            5. Identify missing details (e.g., landmark, duration, severity, exact spot) that the citizen could add to expedite resolution.
+
+            Output VALID JSON ONLY with keys:
+            - suggestedTitle: string
+            - improvedDescription: string
+            - suggestedCategory: string
+            - suggestedPriority: string
+            - priorityReasoning: string
+            - missingDetailsAdvice: string
+        """.trimIndent()
+
+        if (isGeminiKeyConfigured()) {
+            try {
+                val jsonResponse = callGeminiRest(prompt)
+                val parsed = parseDraftJson(jsonResponse, draftText, category)
+                if (parsed != null) return@withContext parsed
+            } catch (e: Exception) {
+                // Fallback to offline heuristic
+            }
+        }
+
+        return@withContext performOfflineDraftImprovement(draftText, category)
     }
 
     private fun callGeminiRest(prompt: String): String {
@@ -336,5 +375,111 @@ class GeminiAiService {
                 "What would you like assistance with?"
             }
         }
+    }
+
+    private fun parseDraftJson(
+        jsonString: String,
+        originalDraft: String,
+        userCategory: String?
+    ): AiDraftSuggestion? {
+        try {
+            var cleaned = jsonString.trim()
+            if (cleaned.startsWith("```json")) {
+                cleaned = cleaned.removePrefix("```json").removeSuffix("```").trim()
+            } else if (cleaned.startsWith("```")) {
+                cleaned = cleaned.removePrefix("```").removeSuffix("```").trim()
+            }
+
+            val json = JSONObject(cleaned)
+            val title = json.optString("suggestedTitle", originalDraft.take(50))
+            val desc = json.optString("improvedDescription", originalDraft)
+            val catStr = json.optString("suggestedCategory", userCategory ?: "Other Civic Issue")
+            val prioStr = json.optString("suggestedPriority", "Medium")
+            val reason = json.optString("priorityReasoning", "Recommended based on civic engineering hazard assessment.")
+            val missing = json.optString("missingDetailsAdvice", "Consider mentioning the nearest landmark and how long the issue has persisted.")
+
+            val category = IncidentCategory.fromDisplayName(catStr)
+            val priority = when (prioStr.uppercase()) {
+                "CRITICAL" -> IncidentSeverity.CRITICAL
+                "HIGH" -> IncidentSeverity.HIGH
+                "LOW" -> IncidentSeverity.LOW
+                else -> IncidentSeverity.MEDIUM
+            }
+
+            return AiDraftSuggestion(
+                suggestedTitle = title,
+                improvedDescription = desc,
+                suggestedCategory = category,
+                suggestedPriority = priority,
+                priorityReasoning = reason,
+                missingDetailsAdvice = missing
+            )
+        } catch (e: Exception) {
+            return null
+        }
+    }
+
+    private fun performOfflineDraftImprovement(
+        draftText: String,
+        category: String?
+    ): AiDraftSuggestion {
+        val lower = draftText.lowercase()
+        val offlineAnalysis = performOfflineAnalysis(draftText, category)
+
+        val generatedTitle: String
+        val polishedDescription: String
+        val missingDetails: String
+
+        when (offlineAnalysis.suggestedCategory) {
+            IncidentCategory.POTHOLES -> {
+                generatedTitle = "Pothole Hazard on Roadway"
+                polishedDescription = "Severe roadway depression and asphalt degradation reported. $draftText. Poses safety risks to vehicles and commuters requiring urgent patch remediation."
+                missingDetails = "Please specify approximate lane, direction of traffic flow, and whether water collects in the pothole."
+            }
+            IncidentCategory.GARBAGE -> {
+                generatedTitle = "Uncollected Waste and Garbage Overflow"
+                polishedDescription = "Sanitation issue regarding uncollected waste and overflowing municipal dumpster. $draftText. Requires rapid sanitation compactor clearance."
+                missingDetails = "Mention if the waste is spilling onto the pedestrian sidewalk or blocking residential access."
+            }
+            IncidentCategory.FLOODING -> {
+                generatedTitle = "Severe Stormwater Drain Clog & Waterlogging"
+                polishedDescription = "Drainage obstruction causing standing water accumulation. $draftText. Poses structural and hygiene concerns requiring municipal desilting."
+                missingDetails = "Note the approximate water depth and if nearby residential ground floors are threatened."
+            }
+            IncidentCategory.STREETLIGHTS -> {
+                generatedTitle = "Non-Functional Streetlight on Public Corridor"
+                polishedDescription = "Public lighting malfunction causing dark stretch on public roadway. $draftText. Requires public electrical maintenance."
+                missingDetails = "Provide the nearest pole number or landmark building opposite the fixture."
+            }
+            IncidentCategory.WATER_BURST -> {
+                generatedTitle = "Potable Water Pipeline Rupture"
+                polishedDescription = "High-pressure municipal pipeline leakage causing potable water loss and road erosion. $draftText. Requires emergency valve isolation."
+                missingDetails = "Indicate if water pressure in nearby houses has dropped or if road foundation is caving in."
+            }
+            IncidentCategory.FIRE -> {
+                generatedTitle = "Combustion and Thermal Fire Hazard"
+                polishedDescription = "Active or impending combustion hazard reported. $draftText. Urgent containment and fire safety dispatch required."
+                missingDetails = "Confirm if inflammable materials or high-voltage lines are in immediate proximity."
+            }
+            IncidentCategory.TRAFFIC -> {
+                generatedTitle = "Severe Traffic Chokepoint & Signal Malfunction"
+                polishedDescription = "Vehicular congestion and traffic flow bottleneck reported. $draftText. Requires traffic management intervention."
+                missingDetails = "State which intersection approaches are gridlocked."
+            }
+            else -> {
+                generatedTitle = draftText.take(45).ifBlank { "Civic Infrastructure Issue" }
+                polishedDescription = "Citizen civic report: $draftText. Requires municipal inspection and appropriate departmental assignment."
+                missingDetails = "Add specific landmarks, street number, and how many days this issue has been observed."
+            }
+        }
+
+        return AiDraftSuggestion(
+            suggestedTitle = generatedTitle,
+            improvedDescription = polishedDescription,
+            suggestedCategory = offlineAnalysis.suggestedCategory,
+            suggestedPriority = offlineAnalysis.suggestedPriority,
+            priorityReasoning = offlineAnalysis.reasoning,
+            missingDetailsAdvice = missingDetails
+        )
     }
 }

@@ -1,7 +1,11 @@
 package com.example.ui.screens
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -45,15 +49,19 @@ fun ReportScreen(
     val reportLatitude by viewModel.reportLatitude.collectAsState()
     val reportLongitude by viewModel.reportLongitude.collectAsState()
     val reportHasPhoto by viewModel.reportHasPhoto.collectAsState()
+    val reportPhotoUri by viewModel.reportPhotoUri.collectAsState()
     val aiAnalysis by viewModel.reportAiAnalysis.collectAsState()
     val isAnalyzingAi by viewModel.isAnalyzingAi.collectAsState()
     val isSubmitting by viewModel.isSubmittingReport.collectAsState()
     val lastSubmittedComplaint by viewModel.lastSubmittedComplaint.collectAsState()
     val submissionError by viewModel.submissionError.collectAsState()
+    val activeDraft by viewModel.activeDraft.collectAsState()
+    val incidents by viewModel.incidents.collectAsState()
 
     var showEditAiDialog by remember { mutableStateOf(false) }
     var locationPermissionGranted by remember { mutableStateOf(true) }
     var validationError by remember { mutableStateOf<String?>(null) }
+    var draftSavedNotice by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -64,12 +72,38 @@ fun ReportScreen(
         }
     }
 
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.setReportPhotoUri(uri.toString())
+        }
+    }
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spokenTexts = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val spoken = spokenTexts?.firstOrNull()
+            if (!spoken.isNullOrBlank()) {
+                val current = reportDescription
+                viewModel.setReportDescription(if (current.isBlank()) spoken else "$current $spoken")
+            }
+        }
+    }
+
+    // Duplicate detection based on existing active incidents in same category
+    val nearbyDuplicates = remember(incidents, selectedCategory) {
+        incidents.filter { it.category == selectedCategory }
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .background(civicColors.background)
             .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Header
@@ -85,6 +119,94 @@ fun ReportScreen(
                     style = MaterialTheme.typography.labelMedium,
                     color = civicColors.accentTealBright
                 )
+            }
+        }
+
+        // Offline Draft Recovery Banner
+        val currentDraft = activeDraft
+        if (currentDraft != null) {
+            item {
+                Surface(
+                    color = civicColors.accentCyan.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(civicColors.accentCyan.copy(alpha = 0.4f))
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = Icons.Default.Restore, contentDescription = null, tint = civicColors.accentCyan, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Saved Offline Draft Available",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = civicColors.textPrimary
+                                )
+                                val draftSummary = if (currentDraft.title.isNotBlank()) currentDraft.title else currentDraft.category
+                                Text(
+                                    text = draftSummary,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = civicColors.textSecondary,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            TextButton(
+                                onClick = { viewModel.restoreDraft(currentDraft) },
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Text("Restore", color = civicColors.accentCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            IconButton(
+                                onClick = { viewModel.discardDraft() },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Close, contentDescription = "Discard draft", tint = civicColors.textMuted, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Duplicate Awareness Banner
+        if (nearbyDuplicates.isNotEmpty()) {
+            item {
+                Surface(
+                    color = civicColors.accentTeal.copy(alpha = 0.10f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = CardDefaults.outlinedCardBorder().copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(civicColors.accentTeal.copy(alpha = 0.3f))
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.ShareLocation, contentDescription = null, tint = civicColors.accentTealBright, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Duplicate Awareness Alert",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = civicColors.accentTealBright
+                            )
+                            Text(
+                                text = "A similar issue '${nearbyDuplicates.first().title}' is already logged in this sector with ${nearbyDuplicates.first().verifiedCount} verifications.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = civicColors.textSecondary
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -153,11 +275,37 @@ fun ReportScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "2. Incident Details",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = civicColors.textPrimary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "2. Incident Details",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = civicColors.textPrimary
+                        )
+                        IconButton(
+                            onClick = {
+                                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Describe the civic issue...")
+                                }
+                                try {
+                                    speechLauncher.launch(intent)
+                                } catch (e: Exception) {
+                                    // Speech recognition fallback
+                                }
+                            },
+                            modifier = Modifier.testTag("report_voice_input_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "Voice Assisted Input",
+                                tint = civicColors.accentTeal
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
@@ -302,7 +450,7 @@ fun ReportScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                     Box(
                                         modifier = Modifier
                                             .size(44.dp)
@@ -320,12 +468,12 @@ fun ReportScreen(
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(
-                                            text = "civic_incident_capture.jpg",
+                                            text = if (reportPhotoUri != null) "selected_evidence_photo.jpg" else "civic_incident_capture.jpg",
                                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                             color = civicColors.textPrimary
                                         )
                                         Text(
-                                            text = "Geo-Tagged • 1.8 MB • Timestamped",
+                                            text = if (reportPhotoUri != null) "Gallery Selected • Geo-Tagged" else "Geo-Tagged • 1.8 MB • Timestamped",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = civicColors.accentTealBright
                                         )
@@ -333,7 +481,10 @@ fun ReportScreen(
                                 }
 
                                 IconButton(
-                                    onClick = { viewModel.toggleReportHasPhoto(false) },
+                                    onClick = {
+                                        viewModel.setReportPhotoUri(null)
+                                        viewModel.toggleReportHasPhoto(false)
+                                    },
                                     modifier = Modifier.testTag("remove_photo_button")
                                 ) {
                                     Icon(
@@ -346,7 +497,11 @@ fun ReportScreen(
                         }
                     } else {
                         OutlinedButton(
-                            onClick = { viewModel.toggleReportHasPhoto(true) },
+                            onClick = {
+                                photoPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -358,7 +513,7 @@ fun ReportScreen(
                         ) {
                             Icon(imageVector = Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "Capture / Attach Evidence Photo")
+                            Text(text = "Capture / Pick Evidence Photo (Gallery)")
                         }
                     }
                 }
@@ -534,6 +689,31 @@ fun ReportScreen(
                         color = Color.White
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedButton(
+                onClick = {
+                    viewModel.saveDraft()
+                    draftSavedNotice = true
+                },
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .testTag("save_offline_draft_button"),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = civicColors.accentCyan),
+                border = CardDefaults.outlinedCardBorder().copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(civicColors.cardBorder)
+                )
+            ) {
+                Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (draftSavedNotice) "Draft Saved to Device ✓" else "Save as Offline Draft",
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }

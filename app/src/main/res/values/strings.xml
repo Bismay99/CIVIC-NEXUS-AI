@@ -1,3 +1,57 @@
 <resources>
     <string name="app_name">Civic Nexus AI</string>
+    <string name="tagline">Smart City Nervous System • Urban Governance Grid</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_explore">Explore</string>
+    <string name="nav_complaints">My Complaints</string>
+    <string name="nav_notifications">Notifications</string>
+    <string name="nav_profile">Profile</string>
+
+    <!-- Home Actions & Sections -->
+    <string name="welcome_prefix">Welcome back,</string>
+    <string name="civic_motto">Empowering citizens with AI-driven civic governance</string>
+    <string name="quick_actions">Quick Actions</string>
+    <string name="action_report_issue">Report Issue</string>
+    <string name="action_explore_nearby">Explore Nearby</string>
+    <string name="action_my_complaints">My Complaints</string>
+    <string name="action_emergency_sos">Emergency SOS</string>
+    <string name="stat_total_reports">Total Reports</string>
+    <string name="stat_active_issues">Active Issues</string>
+    <string name="stat_resolved_issues">Resolved</string>
+    <string name="stat_under_review">Under Review</string>
+    <string name="recent_activity">Recent Activity</string>
+    <string name="nearby_civic_issues">Nearby Civic Issues</string>
+    <string name="community_impact">Community Impact</string>
+
+    <!-- Complaint Categories -->
+    <string name="cat_potholes">Potholes &amp; Roads</string>
+    <string name="cat_garbage">Garbage &amp; Sanitation</string>
+    <string name="cat_flooding">Drainage &amp; Flooding</string>
+    <string name="cat_fire">Fire &amp; Hazard</string>
+    <string name="cat_traffic">Traffic Congestion</string>
+    <string name="cat_streetlights">Streetlights</string>
+    <string name="cat_water">Water Supply</string>
+    <string name="cat_other">Other Civic Issue</string>
+
+    <!-- Statuses -->
+    <string name="status_submitted">Submitted</string>
+    <string name="status_under_review">Under Review</string>
+    <string name="status_assigned">Assigned</string>
+    <string name="status_in_progress">In Progress</string>
+    <string name="status_resolved">Resolved</string>
+    <string name="status_reopened">Reopened</string>
+
+    <!-- Common Buttons -->
+    <string name="btn_submit">Submit Report</string>
+    <string name="btn_save_draft">Save Draft</string>
+    <string name="btn_discard_draft">Discard Draft</string>
+    <string name="btn_ai_assist">AI Assist</string>
+    <string name="btn_use_location">Use Current Location</string>
+    <string name="btn_take_photo">Take Photo</string>
+    <string name="btn_choose_gallery">Choose Photo</string>
+    <string name="btn_voice_input">Voice Input</string>
+    <string name="btn_upvote_confirm">Confirm Issue</string>
+    <string name="btn_reopen">Request Reopen</string>
 </resources>

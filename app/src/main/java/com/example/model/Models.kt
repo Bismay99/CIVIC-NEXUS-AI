@@ -29,8 +29,18 @@ enum class ComplaintStatus(val displayName: String, val stepIndex: Int) {
     UNDER_REVIEW("Under Review", 1),
     ASSIGNED("Assigned", 2),
     IN_PROGRESS("In Progress", 3),
-    RESOLVED("Resolved", 4)
+    RESOLVED("Resolved", 4),
+    REOPENED("Reopened", 1)
 }
+
+data class AiDraftSuggestion(
+    val suggestedTitle: String,
+    val improvedDescription: String,
+    val suggestedCategory: IncidentCategory,
+    val suggestedPriority: IncidentSeverity,
+    val priorityReasoning: String,
+    val missingDetailsAdvice: String
+)
 
 data class TimelineStep(
     val status: ComplaintStatus,
@@ -207,7 +217,7 @@ enum class MainNavigationTab(val label: String) {
     HOME("Home"),
     MAP("City Map"),
     REPORT("Report"),
-    ASSISTANT("AI Assistant"),
+    ASSISTANT("AI Copilot"),
     PROFILE("Profile")
 }
 

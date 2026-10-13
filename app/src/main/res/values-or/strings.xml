@@ -1,0 +1,57 @@
+<resources>
+    <string name="app_name">Civic Nexus AI</string>
+    <string name="tagline">ସ୍ମାର୍ଟ ସିଟି ନର୍ଭସ ସିଷ୍ଟମ • ନାଗରିକ ପ୍ରଶାସନ ଗ୍ରୀଡ୍</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">ମୂଳପୃଷ୍ଠା</string>
+    <string name="nav_explore">ଅନ୍ୱେଷଣ</string>
+    <string name="nav_complaints">ମୋର ଅଭିଯୋଗ</string>
+    <string name="nav_notifications">ବିଜ୍ଞପ୍ତି</string>
+    <string name="nav_profile">ପ୍ରୋଫାଇଲ୍</string>
+
+    <!-- Home Actions & Sections -->
+    <string name="welcome_prefix">ନମସ୍କାର,</string>
+    <string name="civic_motto">ଏଆଇ-ଚାଳିତ ନାଗରିକ ପ୍ରଶାସନ ସହିତ ନାଗରିକଙ୍କ ସଶକ୍ତୀକରଣ</string>
+    <string name="quick_actions">ତୁରନ୍ତ କାର୍ଯ୍ୟ</string>
+    <string name="action_report_issue">ଅଭିଯୋଗ ଦାଖଲ କରନ୍ତୁ</string>
+    <string name="action_explore_nearby">ନିକଟସ୍ଥ ସମସ୍ୟା ଦେଖନ୍ତୁ</string>
+    <string name="action_my_complaints">ମୋର ଅଭିଯୋଗ</string>
+    <string name="action_emergency_sos">ଜରୁରୀକାଳୀନ ଏସଓଏସ</string>
+    <string name="stat_total_reports">ମୋଟ ଅଭିଯୋଗ</string>
+    <string name="stat_active_issues">ସକ୍ରିୟ ସମସ୍ୟା</string>
+    <string name="stat_resolved_issues">ସମାଧାନ ହୋଇଛି</string>
+    <string name="stat_under_review">ସମୀକ୍ଷାଧୀନ</string>
+    <string name="recent_activity">ସାମ୍ପ୍ରତିକ କାର୍ଯ୍ୟକଳାପ</string>
+    <string name="nearby_civic_issues">ନିକଟସ୍ଥ ନାଗରିକ ସମସ୍ୟା</string>
+    <string name="community_impact">ସାମାଜିକ ପ୍ରଭାବ</string>
+
+    <!-- Complaint Categories -->
+    <string name="cat_potholes">ରାସ୍ତା ଏବଂ ଖାଲଖମା</string>
+    <string name="cat_garbage">ଅଳିଆ ଆବର୍ଜନା ଓ ପରିମଳ</string>
+    <string name="cat_flooding">ଜଳ ନିଷ୍କାସନ ଏବଂ ଜଳବନ୍ଦୀ</string>
+    <string name="cat_fire">ଅଗ୍ନି ଏବଂ ବିପଦ</string>
+    <string name="cat_traffic">ଟ୍ରାଫିକ୍ ଜାମ୍</string>
+    <string name="cat_streetlights">ଷ୍ଟ୍ରିଟ୍ ଲାଇଟ୍</string>
+    <string name="cat_water">ଜଳ ଯୋଗାଣ</string>
+    <string name="cat_other">ଅନ୍ୟାନ୍ୟ ସମସ୍ୟା</string>
+
+    <!-- Statuses -->
+    <string name="status_submitted">ଦାଖଲ ହୋଇଛି</string>
+    <string name="status_under_review">ସମୀକ୍ଷାଧୀନ</string>
+    <string name="status_assigned">ଅଧିକାରୀ ନିଯୁକ୍ତ</string>
+    <string name="status_in_progress">କାର୍ଯ୍ୟ ଚାଲିଛି</string>
+    <string name="status_resolved">ସମାଧାନ ହୋଇଛି</string>
+    <string name="status_reopened">ପୁନର୍ବାର ଖୋଲାଯାଇଛି</string>
+
+    <!-- Common Buttons -->
+    <string name="btn_submit">ଅଭିଯୋଗ ପଠାନ୍ତୁ</string>
+    <string name="btn_save_draft">ଡ୍ରାଫ୍ଟ ସାଇତନ୍ତୁ</string>
+    <string name="btn_discard_draft">ଡ୍ରାଫ୍ଟ କାଢିଦିଅନ୍ତୁ</string>
+    <string name="btn_ai_assist">ଏଆଇ ସହାୟତା</string>
+    <string name="btn_use_location">ବର୍ତ୍ତମାନର ସ୍ଥାନ ବ୍ୟବହାର କରନ୍ତୁ</string>
+    <string name="btn_take_photo">ଫଟୋ ଉଠାନ୍ତୁ</string>
+    <string name="btn_choose_gallery">ଗ୍ୟାଲେରୀରୁ ବାଛନ୍ତୁ</string>
+    <string name="btn_voice_input">ଭଏସ୍ ଇନପୁଟ୍</string>
+    <string name="btn_upvote_confirm">ସମସ୍ୟା ନିଶ୍ଚିତ କରନ୍ତୁ</string>
+    <string name="btn_reopen">ପୁନର୍ବାର ଖୋଲିବାକୁ ଅନୁରୋଧ</string>
+</resources>

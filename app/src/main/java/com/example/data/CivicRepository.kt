@@ -12,7 +12,11 @@ import com.example.data.local.CivicDatabase
 import com.example.data.local.ComplaintDao
 import com.example.data.local.toDomain
 import com.example.data.local.toEntity
+import com.example.data.local.ComplaintConverters
+import com.example.data.local.ComplaintDraftEntity
 import com.example.model.*
+import com.example.util.AppLanguage
+import com.example.util.LocalizationManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -35,6 +39,53 @@ class CivicRepository(
 ) {
     val authService = FirebaseAuthService(context.applicationContext)
     val complaintDao: ComplaintDao = database.complaintDao()
+    private val localizationManager = LocalizationManager(context.applicationContext)
+    val currentLanguage: StateFlow<AppLanguage> = localizationManager.currentLanguage
+
+    fun setLanguage(language: AppLanguage) {
+        localizationManager.setLanguage(language)
+    }
+
+    // Voting restriction tracking
+    private val votePrefs = context.getSharedPreferences("civic_incident_votes", Context.MODE_PRIVATE)
+    private val _upvotedIncidentIds = MutableStateFlow(
+        votePrefs.getStringSet("voted_ids", emptySet()) ?: emptySet()
+    )
+    val upvotedIncidentIds: StateFlow<Set<String>> = _upvotedIncidentIds.asStateFlow()
+
+    fun hasUpvoted(incidentId: String): Boolean = _upvotedIncidentIds.value.contains(incidentId)
+
+    // Offline draft flow
+    val activeDraft: Flow<ComplaintDraftEntity?> = complaintDao.getActiveDraft()
+
+    suspend fun saveDraft(
+        title: String,
+        description: String,
+        category: String,
+        address: String,
+        latitude: Double,
+        longitude: Double,
+        hasPhoto: Boolean,
+        photoUri: String
+    ) {
+        val draft = ComplaintDraftEntity(
+            id = "ACTIVE_CITIZEN_DRAFT",
+            title = title,
+            description = description,
+            category = category,
+            address = address,
+            latitude = latitude,
+            longitude = longitude,
+            hasPhoto = hasPhoto,
+            photoUri = photoUri,
+            lastUpdatedTimestamp = System.currentTimeMillis()
+        )
+        complaintDao.saveDraft(draft)
+    }
+
+    suspend fun clearDraft() {
+        complaintDao.clearDraft()
+    }
 
     // Auth State
     private val _authUiState = MutableStateFlow(
@@ -440,13 +491,87 @@ class CivicRepository(
         }
     }
 
-    fun upvoteIncident(incidentId: String) {
+    fun upvoteIncident(incidentId: String): Boolean {
+        if (_upvotedIncidentIds.value.contains(incidentId)) {
+            return false // Already verified by this citizen
+        }
         val current = _incidents.value.toMutableList()
         val index = current.indexOfFirst { it.id == incidentId }
         if (index != -1) {
             val item = current[index]
             current[index] = item.copy(verifiedCount = item.verifiedCount + 1)
             _incidents.value = current
+
+            val updatedSet = _upvotedIncidentIds.value + incidentId
+            _upvotedIncidentIds.value = updatedSet
+            try {
+                votePrefs.edit().putStringSet("voted_ids", updatedSet).apply()
+            } catch (e: Exception) {
+                Log.w("CivicRepository", "Failed to persist vote: ${e.message}")
+            }
+            // Best effort Firestore upvote
+            scope.launch {
+                try {
+                    firestoreService.upvoteIncidentVerification(incidentId)
+                } catch (e: Exception) {
+                    // Ignored in offline/local mode
+                }
+            }
+            return true
+        }
+        return false
+    }
+
+    suspend fun reopenComplaint(referenceId: String, citizenFeedback: String): Result<Unit> {
+        return try {
+            val existing = complaintDao.getComplaintById(referenceId)
+                ?: return Result.failure(IllegalArgumentException("Complaint $referenceId not found in local store."))
+
+            val domain = existing.toDomain()
+            val nowTime = "Today, " + SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+
+            val reopenedStep = TimelineStep(
+                status = ComplaintStatus.REOPENED,
+                title = "Complaint Reopened by Citizen",
+                timestamp = nowTime,
+                note = "Citizen escalated: ${citizenFeedback.ifBlank { "Issue persisted or recurrence observed." }}",
+                isCompleted = true,
+                isCurrent = true
+            )
+
+            val updatedTimeline = domain.timeline.map { it.copy(isCurrent = false) } + reopenedStep
+            val updatedTimelineJson = ComplaintConverters.timelineToJson(updatedTimeline)
+
+            // Update in Room
+            complaintDao.updateComplaintStatus(
+                referenceId = referenceId,
+                newStatus = ComplaintStatus.REOPENED.name,
+                newTimelineJson = updatedTimelineJson
+            )
+
+            // Best effort sync to Firestore
+            try {
+                firestoreService.updateComplaintTimeline(referenceId, ComplaintStatus.REOPENED.name, citizenFeedback)
+            } catch (e: Throwable) {
+                Log.w("CivicRepository", "Firestore reopen sync skipped: ${e.message}")
+            }
+
+            // Emit notification
+            val notif = AppNotification(
+                id = "NOTIF-REOPEN-" + UUID.randomUUID().toString().take(6),
+                title = "Complaint Reopened: $referenceId",
+                message = "Your grievance has been reopened for priority zonal review.",
+                category = "Status Update",
+                timestamp = "Just now",
+                isRead = false,
+                isSimulated = true
+            )
+            _notifications.value = listOf(notif) + _notifications.value
+
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Log.e("CivicRepository", "Failed to reopen complaint: ${e.message}", e)
+            Result.failure(e)
         }
     }
 
