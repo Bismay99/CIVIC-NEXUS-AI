@@ -151,15 +151,27 @@ class FirebaseAuthService(private val context: Context) {
             }
             result.credential
         } catch (e: GetCredentialCancellationException) {
-            val causeMsg = e.cause?.localizedMessage
-            val msg = e.message
-            Log.w(tag, "Google Sign-In cancelled or dismissed: $msg (cause: $causeMsg)", e)
-            val isExplicitUserDismiss = (causeMsg == null || causeMsg.contains("user", ignoreCase = true) || causeMsg.contains("activity is cancelled", ignoreCase = true)) &&
-                    (msg == null || msg.contains("cancel", ignoreCase = true) || msg.contains("activity is cancelled", ignoreCase = true))
+            val causeMsg = e.cause?.localizedMessage ?: ""
+            val msg = e.message ?: ""
+            Log.w(tag, "Google Sign-In CredentialManager cancellation/status exception: $msg (cause: $causeMsg)", e)
+            val combinedMsg = "$msg $causeMsg".lowercase()
+
+            if (combinedMsg.contains("16") || combinedMsg.contains("reauth") || combinedMsg.contains("developer_error")) {
+                Log.e(
+                    tag,
+                    "Google Play Services error [16] (Account reauth failed). Possible causes: 1) App SHA-1 certificate mismatch in Firebase Console, 2) Google provider disabled in Firebase Authentication, 3) Stale account credentials on the device."
+                )
+                return Result.failure(
+                    Exception("Google Sign-In failed [16]: Account re-authentication failed. Please verify your Google account on this device and ensure the app's SHA-1 fingerprint is registered in Firebase Console.")
+                )
+            }
+
+            val isExplicitUserDismiss = (combinedMsg.contains("user") || combinedMsg.contains("activity is cancelled") || combinedMsg.contains("cancelled by user")) &&
+                    !combinedMsg.contains("reauth") && !combinedMsg.contains("16")
             if (isExplicitUserDismiss) {
                 return Result.failure(GoogleSignInCancelledException())
             } else {
-                return Result.failure(Exception("Google Sign-In was cancelled or failed: ${causeMsg ?: msg}"))
+                return Result.failure(Exception("Google Sign-In was cancelled or failed: ${causeMsg.ifBlank { msg }}"))
             }
         } catch (e: GetCredentialCustomException) {
             Log.e(tag, "Google Sign-In custom error: ${e.type} - ${e.message}", e)

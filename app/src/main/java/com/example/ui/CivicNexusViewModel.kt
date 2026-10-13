@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 
 sealed class SubScreen {
     data object None : SubScreen()
+    data object ReportIssue : SubScreen()
+    data object AiAssistant : SubScreen()
     data object EmergencyCenter : SubScreen()
     data object MyComplaints : SubScreen()
     data class ComplaintDetail(val complaint: Complaint) : SubScreen()
@@ -93,6 +95,7 @@ class CivicNexusViewModel(
     val emergencyFacilities = repository.emergencyFacilities
     val notifications = repository.notifications
     val chatMessages = repository.chatMessages
+    val isChatLoading = repository.isChatLoading
     val simulation = repository.simulation
     val profile = repository.profile
 
@@ -376,10 +379,25 @@ class CivicNexusViewModel(
 
     // Assistant Chat
     fun sendChatMessage(text: String) {
-        if (text.isBlank()) return
+        if (text.isBlank() || isChatLoading.value) return
         viewModelScope.launch {
             repository.sendChatMessage(text)
         }
+    }
+
+    fun retryChatMessage(prompt: String) {
+        if (isChatLoading.value) return
+        viewModelScope.launch {
+            repository.retryChatMessage(prompt)
+        }
+    }
+
+    fun requestOfflineGuidance(query: String) {
+        repository.provideOfflineGuidance(query)
+    }
+
+    fun clearChat() {
+        repository.clearChat()
     }
 
     // Emergency Simulation

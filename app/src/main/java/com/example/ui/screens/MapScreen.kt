@@ -39,6 +39,7 @@ import com.example.ui.theme.*
 @Composable
 fun MapScreen(
     viewModel: CivicNexusViewModel,
+    onNavigateToReport: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val civicColors = MaterialTheme.civicColors
@@ -48,13 +49,22 @@ fun MapScreen(
     val categoryFilter by viewModel.mapCategoryFilter.collectAsState()
     val selectedIncident by viewModel.selectedMapIncident.collectAsState()
 
+    var searchQuery by remember { mutableStateOf("") }
+    var isListView by remember { mutableStateOf(false) }
     var heatmapMode by remember { mutableStateOf(false) }
     var showFacilitiesOnly by remember { mutableStateOf(false) }
     var selectedFacility by remember { mutableStateOf<EmergencyFacility?>(null) }
 
-    val filteredIncidents = remember(incidents, categoryFilter) {
-        if (categoryFilter == null) incidents
-        else incidents.filter { it.category == categoryFilter }
+    val filteredIncidents = remember(incidents, categoryFilter, searchQuery) {
+        incidents.filter { inc ->
+            val matchesCategory = categoryFilter == null || inc.category == categoryFilter
+            val matchesQuery = searchQuery.isBlank() ||
+                    inc.title.contains(searchQuery, ignoreCase = true) ||
+                    inc.description.contains(searchQuery, ignoreCase = true) ||
+                    inc.locationName.contains(searchQuery, ignoreCase = true) ||
+                    inc.department.contains(searchQuery, ignoreCase = true)
+            matchesCategory && matchesQuery
+        }
     }
 
     Column(

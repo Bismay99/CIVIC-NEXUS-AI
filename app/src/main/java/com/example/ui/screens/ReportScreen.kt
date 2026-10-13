@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -39,8 +41,12 @@ import com.example.ui.theme.*
 @Composable
 fun ReportScreen(
     viewModel: CivicNexusViewModel,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    if (onBack != null) {
+        BackHandler { onBack() }
+    }
     val civicColors = MaterialTheme.civicColors
     val selectedCategory by viewModel.reportCategory.collectAsState()
     val reportTitle by viewModel.reportTitle.collectAsState()
@@ -108,17 +114,37 @@ fun ReportScreen(
     ) {
         // Header
         item {
-            Column {
-                Text(
-                    text = "AI Civic Complaint Reporting",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = civicColors.textPrimary
-                )
-                Text(
-                    text = "Smart City Neural Triage • Self-Healing Dispatch",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = civicColors.accentTealBright
-                )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onBack != null) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.testTag("report_back_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = civicColors.textPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Column {
+                    Text(
+                        text = "AI Civic Complaint Reporting",
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                        color = civicColors.textPrimary
+                    )
+                    Text(
+                        text = "Smart City Neural Triage • Self-Healing Dispatch",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = civicColors.accentTealBright
+                    )
+                }
             }
         }
 
@@ -797,7 +823,10 @@ fun ReportScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissSuccessDialog() }) {
+                TextButton(onClick = {
+                    viewModel.dismissSuccessDialog()
+                    onBack?.invoke()
+                }) {
                     Text(text = "Done", color = civicColors.textSecondary)
                 }
             },

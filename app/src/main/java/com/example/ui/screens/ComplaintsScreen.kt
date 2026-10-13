@@ -32,6 +32,7 @@ import com.example.ui.theme.*
 fun ComplaintsScreen(
     viewModel: CivicNexusViewModel,
     onBack: () -> Unit,
+    onNavigateToReport: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val civicColors = MaterialTheme.civicColors
@@ -71,23 +72,43 @@ fun ComplaintsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.testTag("complaints_back_button")) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = civicColors.textPrimary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("complaints_back_button")) {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = civicColors.textPrimary)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "My Civic Complaints",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = civicColors.textPrimary
+                        )
+                        Text(
+                            text = "${complaints.size} Tracked Municipal Reports",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = civicColors.accentTealBright
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = "My Civic Complaints",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = civicColors.textPrimary
-                    )
-                    Text(
-                        text = "${complaints.size} Tracked Municipal Reports",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = civicColors.accentTealBright
-                    )
+
+                if (onNavigateToReport != null) {
+                    FilledTonalButton(
+                        onClick = onNavigateToReport,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = civicColors.accentTeal.copy(alpha = 0.2f),
+                            contentColor = civicColors.accentTealBright
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.testTag("complaints_report_button")
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "Report", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
                 }
             }
         }
@@ -195,6 +216,19 @@ fun ComplaintsScreen(
                             color = civicColors.textSecondary,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
+                        if (onNavigateToReport != null) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = onNavigateToReport,
+                                colors = ButtonDefaults.buttonColors(containerColor = civicColors.accentTeal),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("empty_report_button")
+                            ) {
+                                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Report First Issue", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }

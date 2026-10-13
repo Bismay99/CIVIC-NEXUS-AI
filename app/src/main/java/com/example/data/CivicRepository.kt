@@ -159,6 +159,9 @@ class CivicRepository(
     private val _chatMessages = MutableStateFlow(SampleData.initialChatMessages)
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
 
+    private val _isChatLoading = MutableStateFlow(false)
+    val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
+
     private val _simulation = MutableStateFlow(SampleData.defaultEmergencySimulation)
     val simulation: StateFlow<EmergencySimulation> = _simulation.asStateFlow()
 
@@ -321,13 +324,21 @@ class CivicRepository(
         return geminiService.analyzeIncident(description, categoryName)
     }
 
-    suspend fun sendChatMessage(userText: String) {
+    suspend fun sendChatMessage(userText: String): Result<String> {
+        val trimmed = userText.trim()
+        if (trimmed.isBlank()) {
+            return Result.failure(IllegalArgumentException("Message cannot be blank"))
+        }
+        if (_isChatLoading.value) {
+            return Result.failure(IllegalStateException("A request is already in progress"))
+        }
+
         val userMsgId = UUID.randomUUID().toString()
         val nowTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
 
         val userMessage = ChatMessage(
             id = userMsgId,
-            text = userText,
+            text = trimmed,
             isUser = true,
             timestamp = nowTime
         )
@@ -335,33 +346,97 @@ class CivicRepository(
         val thinkingMsgId = UUID.randomUUID().toString()
         val thinkingMessage = ChatMessage(
             id = thinkingMsgId,
-            text = "Analyzing civic knowledge network...",
+            text = "Consulting AI City Copilot (Gemini 3.5 Flash)...",
             isUser = false,
             timestamp = nowTime,
             isAiThinking = true
         )
 
         _chatMessages.value = _chatMessages.value + userMessage + thinkingMessage
+        _isChatLoading.value = true
 
         val context = "City pulse score is ${_cityPulse.value.pulseScore}/100. " +
                 "Complaints logged: ${complaints.value.size}. " +
-                "Latest reference: ${complaints.value.firstOrNull()?.referenceId ?: "None"}."
+                "Active incidents: ${incidents.value.size}."
 
-        val (responseString, isGemini) = geminiService.askAssistant(userText, context)
+        // Extract historical multi-turn conversation (user, assistant pairs)
+        val historyTurns = mutableListOf<Pair<String, String>>()
+        val validPast = _chatMessages.value.filter { !it.isAiThinking && !it.isError && it.id != userMsgId }
+        var pendingUser: String? = null
+        for (msg in validPast) {
+            if (msg.isUser) {
+                pendingUser = msg.text
+            } else if (pendingUser != null) {
+                historyTurns.add(Pair(pendingUser, msg.text))
+                pendingUser = null
+            }
+        }
 
-        _chatMessages.value = _chatMessages.value.filter { it.id != thinkingMsgId } + ChatMessage(
+        return try {
+            val (responseString, isGemini) = geminiService.askAssistant(
+                userPrompt = trimmed,
+                history = historyTurns,
+                contextSummary = context
+            )
+
+            val replyMsg = ChatMessage(
+                id = UUID.randomUUID().toString(),
+                text = responseString,
+                isUser = false,
+                timestamp = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()),
+                isAiThinking = false,
+                isGeminiPowered = isGemini,
+                suggestedActions = if (trimmed.lowercase().contains("report")) {
+                    listOf("Go to Report Screen", "Check Active Incidents")
+                } else if (trimmed.lowercase().contains("light") || trimmed.lowercase().contains("pothole")) {
+                    listOf("File Official Complaint", "View Emergency Helplines")
+                } else {
+                    listOf("How do I report a broken streetlight?", "Emergency helplines", "Waste segregation rules")
+                }
+            )
+
+            _chatMessages.value = _chatMessages.value.filter { it.id != thinkingMsgId } + replyMsg
+            Result.success(responseString)
+        } catch (e: Throwable) {
+            val errorText = e.message ?: "Failed to receive response from AI City Copilot."
+            val errorMsg = ChatMessage(
+                id = UUID.randomUUID().toString(),
+                text = errorText,
+                isUser = false,
+                timestamp = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()),
+                isAiThinking = false,
+                isError = true,
+                retryPrompt = trimmed,
+                suggestedActions = listOf("Retry", "Offline Municipal Guide")
+            )
+            _chatMessages.value = _chatMessages.value.filter { it.id != thinkingMsgId } + errorMsg
+            Result.failure(e)
+        } finally {
+            _isChatLoading.value = false
+        }
+    }
+
+    suspend fun retryChatMessage(prompt: String) {
+        _chatMessages.value = _chatMessages.value.filter { !it.isError || it.retryPrompt != prompt }
+        sendChatMessage(prompt)
+    }
+
+    fun provideOfflineGuidance(query: String) {
+        val guidanceText = geminiService.getOfflineCivicGuidance(query)
+        val guidanceMsg = ChatMessage(
             id = UUID.randomUUID().toString(),
-            text = responseString,
+            text = guidanceText,
             isUser = false,
             timestamp = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date()),
             isAiThinking = false,
-            isGeminiPowered = isGemini,
-            suggestedActions = if (userText.lowercase().contains("report")) {
-                listOf("Go to Report Screen", "Check Active Incidents")
-            } else {
-                listOf("How do I report a pothole?", "Emergency helplines", "Status of CN-2026-1042")
-            }
+            isOfflineGuidance = true,
+            suggestedActions = listOf("How do I report a pothole?", "Emergency helplines", "Waste segregation rules")
         )
+        _chatMessages.value = _chatMessages.value + guidanceMsg
+    }
+
+    fun clearChat() {
+        _chatMessages.value = SampleData.initialChatMessages
     }
 
     suspend fun submitNewComplaint(

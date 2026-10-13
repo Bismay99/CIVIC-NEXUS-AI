@@ -76,6 +76,67 @@ fun HomeScreen(
         contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // 0. Citizen Personalized Greeting & Verification Header
+        item {
+            val profile by viewModel.profile.collectAsState()
+            GlassCard(
+                shape = RoundedCornerShape(16.dp),
+                elevation = 2.dp,
+                contentPadding = PaddingValues(14.dp),
+                modifier = Modifier.fillMaxWidth().testTag("home_citizen_welcome_card")
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(civicColors.accentTeal.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = profile.name.take(2).uppercase(),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = civicColors.accentTealBright
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Welcome back, ${profile.name.substringBefore(" ")}",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = civicColors.textPrimary
+                            )
+                            Text(
+                                text = "${profile.citizenId} • ${profile.ward}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = civicColors.textMuted
+                            )
+                        }
+                    }
+
+                    Surface(
+                        color = civicColors.accentTeal.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "Score ${profile.trustScore}",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = civicColors.accentTealBright,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         // 1. Smart City Overview & Pulse Banner (GlassCard)
         item {
             GlassCard(
@@ -286,6 +347,68 @@ fun HomeScreen(
                     accentColor = civicColors.accentBlue,
                     modifier = Modifier.weight(1f),
                     onClick = onOpenComplaints
+                )
+            }
+        }
+
+        // 2B. Citizen Grievance Overview Metric Cards (Section 4.B)
+        item {
+            GlassSectionHeader(
+                title = "My Grievance Summary",
+                subtitle = "Real-Time Tracking • Persistent Database"
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                StatMetricCard(
+                    title = "Total Filed",
+                    value = "${complaints.size}",
+                    subtitle = "All Records",
+                    icon = Icons.AutoMirrored.Filled.Assignment,
+                    accentColor = civicColors.accentTeal,
+                    modifier = Modifier.weight(1f),
+                    testTag = "stat_total_reports"
+                )
+
+                StatMetricCard(
+                    title = "Under Review",
+                    value = "${complaints.count { it.status == ComplaintStatus.UNDER_REVIEW || it.status == ComplaintStatus.SUBMITTED }}",
+                    subtitle = "Awaiting Action",
+                    icon = Icons.Default.HourglassTop,
+                    accentColor = StatusUnderReview,
+                    modifier = Modifier.weight(1f),
+                    testTag = "stat_under_review"
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                StatMetricCard(
+                    title = "In Progress",
+                    value = "${complaints.count { it.status == ComplaintStatus.IN_PROGRESS || it.status == ComplaintStatus.ASSIGNED }}",
+                    subtitle = "Crew Assigned",
+                    icon = Icons.Default.Engineering,
+                    accentColor = StatusInProgress,
+                    modifier = Modifier.weight(1f),
+                    testTag = "stat_in_progress"
+                )
+
+                StatMetricCard(
+                    title = "Resolved",
+                    value = "${complaints.count { it.status == ComplaintStatus.RESOLVED }}",
+                    subtitle = "Closed & QA Verified",
+                    icon = Icons.Default.CheckCircle,
+                    accentColor = StatusResolved,
+                    modifier = Modifier.weight(1f),
+                    testTag = "stat_resolved"
                 )
             }
         }

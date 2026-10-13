@@ -13,15 +13,22 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
 class GeminiAiService {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
+
+    // Model per official gemini-api guidelines: gemini-3.5-flash for general text and Q&A
+    private val geminiModel = "gemini-3.5-flash"
 
     private val apiKey: String
         get() = try {
@@ -32,9 +39,64 @@ class GeminiAiService {
 
     fun isGeminiKeyConfigured(): Boolean {
         val key = apiKey.trim()
-        return key.isNotEmpty() && key != "MY_GEMINI_API_KEY" && !key.startsWith("placeholder", ignoreCase = true)
+        return key.isNotEmpty() &&
+                key != "MY_GEMINI_API_KEY" &&
+                !key.startsWith("placeholder", ignoreCase = true) &&
+                !key.startsWith("your_", ignoreCase = true)
     }
 
+    /**
+     * Ask AI City Copilot with multi-turn conversation context.
+     * Throws typed CivicAiException on failure to enable clear error UI and retries.
+     */
+    suspend fun askAssistant(
+        userPrompt: String,
+        history: List<Pair<String, String>> = emptyList(),
+        contextSummary: String = ""
+    ): Pair<String, Boolean> = withContext(Dispatchers.IO) {
+        val trimmedPrompt = userPrompt.trim()
+        if (trimmedPrompt.isBlank()) {
+            throw CivicAiException.BadRequest("Message cannot be empty.")
+        }
+
+        if (!isGeminiKeyConfigured()) {
+            throw CivicAiException.KeyMissing(
+                "Gemini API key is not configured. Please add your GEMINI_API_KEY to the AI Studio Secrets panel or .env file."
+            )
+        }
+
+        val systemPrompt = """
+            You are Civic Nexus AI, the official AI City Copilot for smart municipal governance and citizen assistance.
+            Tone: Professional, empathetic, objective, and action-oriented.
+            Core Capabilities:
+            1. Guide citizens on reporting civic issues (potholes, overflowing garbage, broken streetlights, water pipeline leaks, flooding/drainage, traffic bottlenecks).
+            2. Explain complaint lifecycle in the app: Submitted -> Verified -> Dispatched -> In Progress -> Resolved.
+            3. Provide emergency helpline contacts (112 Universal, 108 Ambulance, 101 Fire, 1916 Water Supply, 1912 Power).
+            4. Explain municipal procedures and Service Level Agreements (SLAs) accurately.
+            Important Guidelines:
+            - Keep answers structured and concise (use bullet points where appropriate).
+            - Do not fabricate live municipal authority decisions, official proclamations, or emergency dispatches.
+            - Provide safe immediate precautions for citizens near physical hazards.
+            Context telemetry: $contextSummary
+        """.trimIndent()
+
+        val responseText = callGeminiMultiTurn(
+            userPrompt = trimmedPrompt.take(1000),
+            history = history.takeLast(8), // Keep recent conversation context bounded
+            systemInstruction = systemPrompt
+        )
+
+        if (responseText.isBlank()) {
+            throw CivicAiException.InvalidResponse("AI City Copilot returned an empty response.")
+        }
+
+        return@withContext Pair(responseText, true)
+    }
+
+    /**
+     * Analyzes citizen complaint report using Gemini multimodal/text reasoning,
+     * falling back to the local deterministic rule engine only if Gemini key is unconfigured.
+     */
     suspend fun analyzeIncident(
         description: String,
         selectedCategoryName: String?
@@ -57,44 +119,20 @@ class GeminiAiService {
 
         if (isGeminiKeyConfigured()) {
             try {
-                val jsonResponse = callGeminiRest(prompt)
+                val jsonResponse = callGeminiSinglePrompt(prompt)
                 val parsed = parseAnalysisJson(jsonResponse, description, selectedCategoryName)
                 if (parsed != null) return@withContext parsed
             } catch (e: Exception) {
-                // Graceful fallback to offline smart city analysis engine
+                // Fall back gracefully to offline engineering rule engine for complaint filing
             }
         }
 
-        // Offline deterministic smart city neural reasoning engine
         return@withContext performOfflineAnalysis(description, selectedCategoryName)
     }
 
-    suspend fun askAssistant(
-        userPrompt: String,
-        contextSummary: String = ""
-    ): Pair<String, Boolean> = withContext(Dispatchers.IO) {
-        if (isGeminiKeyConfigured()) {
-            try {
-                val systemPrompt = """
-                    You are Civic Nexus AI, an intelligent smart city assistant for urban civic operations and citizen governance.
-                    Tone: Professional, helpful, civic-minded, and reassuring.
-                    Provide concise, practical answers regarding city infrastructure, reporting civic issues (potholes, garbage, waterlogging, streetlights), tracking complaints, emergency helplines (112, 108, 101), and smart city self-healing sensor grids.
-                    Context data: $contextSummary
-                """.trimIndent()
-
-                val fullPrompt = "$systemPrompt\n\nCitizen Query: $userPrompt"
-                val response = callGeminiRest(fullPrompt)
-                if (response.isNotBlank()) {
-                    return@withContext Pair(response, true)
-                }
-            } catch (e: Exception) {
-                // Fallback to offline knowledge base
-            }
-        }
-
-        return@withContext Pair(generateOfflineResponse(userPrompt), false)
-    }
-
+    /**
+     * Draft improvement for citizen complaint descriptions.
+     */
     suspend fun improveComplaintDraft(
         draftText: String,
         category: String?
@@ -122,19 +160,81 @@ class GeminiAiService {
 
         if (isGeminiKeyConfigured()) {
             try {
-                val jsonResponse = callGeminiRest(prompt)
+                val jsonResponse = callGeminiSinglePrompt(prompt)
                 val parsed = parseDraftJson(jsonResponse, draftText, category)
                 if (parsed != null) return@withContext parsed
             } catch (e: Exception) {
-                // Fallback to offline heuristic
+                // Fall back to offline heuristics
             }
         }
 
         return@withContext performOfflineDraftImprovement(draftText, category)
     }
 
-    private fun callGeminiRest(prompt: String): String {
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey"
+    /**
+     * Calls Gemini 3.5 Flash REST API with multi-turn conversation history.
+     */
+    private fun callGeminiMultiTurn(
+        userPrompt: String,
+        history: List<Pair<String, String>>,
+        systemInstruction: String
+    ): String {
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$geminiModel:generateContent?key=$apiKey"
+
+        val contentsArray = JSONArray()
+
+        // Append historical turns
+        for ((histUser, histModel) in history) {
+            if (histUser.isNotBlank()) {
+                val userContent = JSONObject().apply {
+                    put("role", "user")
+                    put("parts", JSONArray().apply { put(JSONObject().put("text", histUser)) })
+                }
+                contentsArray.put(userContent)
+            }
+            if (histModel.isNotBlank()) {
+                val modelContent = JSONObject().apply {
+                    put("role", "model")
+                    put("parts", JSONArray().apply { put(JSONObject().put("text", histModel)) })
+                }
+                contentsArray.put(modelContent)
+            }
+        }
+
+        // Append latest user query
+        val currentContent = JSONObject().apply {
+            put("role", "user")
+            put("parts", JSONArray().apply { put(JSONObject().put("text", userPrompt)) })
+        }
+        contentsArray.put(currentContent)
+
+        val jsonBody = JSONObject().apply {
+            put("systemInstruction", JSONObject().apply {
+                put("parts", JSONArray().apply { put(JSONObject().put("text", systemInstruction)) })
+            })
+            put("contents", contentsArray)
+            put("generationConfig", JSONObject().apply {
+                put("temperature", 0.3)
+                put("maxOutputTokens", 800)
+            })
+        }
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .build()
+
+        return executeRequest(request)
+    }
+
+    /**
+     * Calls Gemini 3.5 Flash REST API with a single prompt.
+     */
+    private fun callGeminiSinglePrompt(prompt: String): String {
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/$geminiModel:generateContent?key=$apiKey"
 
         val jsonBody = JSONObject().apply {
             val contents = JSONArray().apply {
@@ -147,6 +247,10 @@ class GeminiAiService {
                 put(contentObj)
             }
             put("contents", contents)
+            put("generationConfig", JSONObject().apply {
+                put("temperature", 0.2)
+                put("maxOutputTokens", 800)
+            })
         }
 
         val mediaType = "application/json; charset=utf-8".toMediaType()
@@ -157,29 +261,105 @@ class GeminiAiService {
             .post(requestBody)
             .build()
 
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw RuntimeException("Gemini API error code: ${response.code}")
-            }
-            val respString = response.body?.string() ?: ""
-            val jsonRoot = JSONObject(respString)
-            val candidates = jsonRoot.optJSONArray("candidates") ?: return ""
-            if (candidates.length() > 0) {
-                val firstCandidate = candidates.getJSONObject(0)
-                val content = firstCandidate.optJSONObject("content")
-                val parts = content?.optJSONArray("parts")
-                if (parts != null && parts.length() > 0) {
-                    return parts.getJSONObject(0).optString("text", "")
+        return executeRequest(request)
+    }
+
+    private fun executeRequest(request: Request): String {
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    when (response.code) {
+                        429 -> throw CivicAiException.RateLimit()
+                        400, 401, 403 -> throw CivicAiException.ServerError(
+                            response.code,
+                            "AI request rejected (${response.code}). Check API key and quotas."
+                        )
+                        else -> throw CivicAiException.ServerError(
+                            response.code,
+                            "AI service error (HTTP ${response.code})."
+                        )
+                    }
+                }
+                val respString = response.body?.string() ?: ""
+                val jsonRoot = JSONObject(respString)
+                val candidates = jsonRoot.optJSONArray("candidates") ?: return ""
+                if (candidates.length() > 0) {
+                    val firstCandidate = candidates.getJSONObject(0)
+                    val content = firstCandidate.optJSONObject("content")
+                    val parts = content?.optJSONArray("parts")
+                    if (parts != null && parts.length() > 0) {
+                        return parts.getJSONObject(0).optString("text", "").trim()
+                    }
                 }
             }
+        } catch (e: SocketTimeoutException) {
+            throw CivicAiException.NetworkError("Network request timed out. Please check connection and retry.", e)
+        } catch (e: UnknownHostException) {
+            throw CivicAiException.NetworkError("Unable to resolve AI host. Check internet connectivity.", e)
+        } catch (e: ConnectException) {
+            throw CivicAiException.NetworkError("Failed to connect to AI server.", e)
+        } catch (e: IOException) {
+            throw CivicAiException.NetworkError("Network error communicating with AI server: ${e.message}", e)
         }
         return ""
     }
 
+    /**
+     * Explicit offline municipal handbook guidance for citizens when network is unavailable.
+     * Explicitly marked in the UI as offline guidance rather than fake AI generation.
+     */
+    fun getOfflineCivicGuidance(query: String): String {
+        val lower = query.lowercase()
+        return when {
+            lower.contains("streetlight") || lower.contains("light") || lower.contains("lamp") -> {
+                "### Official Municipal Guide: Reporting Broken Streetlights\n\n" +
+                "1. **Navigate to 'Report'** and select **'Broken Streetlights'**.\n" +
+                "2. **Location Details**: Mention the pole identification tag or nearest building number.\n" +
+                "3. **SLA Notice**: Municipal Electrical Division conducts circuit testing and replaces LED fixtures within 24 hours."
+            }
+            lower.contains("pothole") || lower.contains("road") || lower.contains("crater") -> {
+                "### Official Municipal Guide: Reporting Road Defects\n\n" +
+                "1. **Navigate to 'Report'**: Use the center action or tab.\n" +
+                "2. **Category**: Select 'Potholes & Roads'.\n" +
+                "3. **Attach Visual Evidence**: Take a clear snapshot showing depth and lane position.\n" +
+                "4. **AI Risk Assessment**: Tap 'Analyze with Civic AI' to tag priority.\n" +
+                "5. **Resolution SLA**: Emergency asphalt patch teams are dispatched within 24–48 hours upon verification."
+            }
+            lower.contains("garbage") || lower.contains("waste") || lower.contains("sanitation") -> {
+                "### Official Municipal Guide: Waste Management & Sanitation\n\n" +
+                "• **Waste Segregation**: Green (Biodegradable/Wet), Blue (Recyclable/Dry), Red (Domestic Hazardous).\n" +
+                "• **Uncollected Garbage**: Report via the 'Garbage & Waste' category.\n" +
+                "• **Resolution SLA**: Municipal mechanical compactors clear reported overflow within 4 hours."
+            }
+            lower.contains("drainage") || lower.contains("flood") || lower.contains("waterlog") -> {
+                "### Official Municipal Guide: Stormwater & Drainage\n\n" +
+                "• Report standing water accumulation or blocked culverts in the 'Flooding & Drainage' category.\n" +
+                "• High waterlogging alerts are automatically routed to the Disaster Quick-Response Wing (ODRAF)."
+            }
+            lower.contains("emergency") || lower.contains("helpline") || lower.contains("number") -> {
+                "### Verified Emergency Helplines:\n\n" +
+                "• 🚨 **Universal Emergency:** `112`\n" +
+                "• 🚑 **Medical Ambulance:** `108`\n" +
+                "• 🚒 **Fire & Rescue:** `101`\n" +
+                "• 💧 **Water Supply Emergency:** `1916`\n" +
+                "• ⚡ **Power Grid Faults:** `1912`\n" +
+                "• 🏛️ **Municipal Citizen Helpline:** `1800-345-0061`"
+            }
+            else -> {
+                "### Municipal Guidance Directory\n\n" +
+                "You are viewing offline civic directory guidance. Supported topics:\n" +
+                "• Filing reports for potholes, waste, drainage, and streetlights\n" +
+                "• Checking emergency helplines (112, 108, 101, 1916)\n" +
+                "• Understanding civic service level agreements (SLAs)\n\n" +
+                "To receive interactive AI answers, please configure your Gemini API key and reconnect to the internet."
+            }
+        }
+    }
+
     private fun parseAnalysisJson(
         rawText: String,
-        description: String,
-        selectedCategoryName: String?
+        originalDescription: String,
+        userCategory: String?
     ): AiAnalysisResult? {
         try {
             var cleaned = rawText.trim()
@@ -190,13 +370,13 @@ class GeminiAiService {
             }
 
             val json = JSONObject(cleaned)
-            val catStr = json.optString("suggestedCategory", "Other Civic Issue")
-            val summary = json.optString("incidentSummary", description.take(60))
+            val catStr = json.optString("suggestedCategory", userCategory ?: "Other Civic Issue")
+            val summary = json.optString("incidentSummary", originalDescription.take(60))
             val prioStr = json.optString("suggestedPriority", "Medium")
-            val dept = json.optString("recommendedDepartment", "Municipal Services")
-            val reason = json.optString("reasoning", "Assessed via municipal neural triage framework.")
-            val score = json.optInt("confidenceScore", 92)
-            val precaution = json.optString("suggestedPrecaution", "Keep safe clearance from the hazard zone.")
+            val dept = json.optString("recommendedDepartment", "Municipal Works Division")
+            val reasoning = json.optString("reasoning", "Assessed based on municipal safety guidelines.")
+            val confidence = json.optInt("confidenceScore", 85)
+            val precaution = json.optString("suggestedPrecaution", "Exercise caution in the vicinity.")
 
             val category = IncidentCategory.fromDisplayName(catStr)
             val priority = when (prioStr.uppercase()) {
@@ -211,169 +391,12 @@ class GeminiAiService {
                 incidentSummary = summary,
                 suggestedPriority = priority,
                 recommendedDepartment = dept,
-                reasoning = reason,
-                confidenceScore = score.coerceIn(75, 99),
+                reasoning = reasoning,
+                confidenceScore = confidence,
                 suggestedPrecaution = precaution
             )
         } catch (e: Exception) {
             return null
-        }
-    }
-
-    private fun performOfflineAnalysis(
-        description: String,
-        selectedCategoryName: String?
-    ): AiAnalysisResult {
-        val lower = description.lowercase()
-
-        val category: IncidentCategory
-        val priority: IncidentSeverity
-        val department: String
-        val reasoning: String
-        val precaution: String
-        val confidence: Int
-
-        when {
-            lower.contains("fire") || lower.contains("smoke") || lower.contains("spark") || lower.contains("cylinder") -> {
-                category = IncidentCategory.FIRE
-                priority = IncidentSeverity.CRITICAL
-                department = "Fire & Emergency Disaster Command"
-                reasoning = "Thermal and combustion risks detected. Immediate containment required to prevent perimeter flashover."
-                precaution = "Evacuate upwind, maintain 100m perimeter, and avoid inhaling dense smoke."
-                confidence = 97
-            }
-            lower.contains("flood") || lower.contains("drain") || lower.contains("waterlog") || lower.contains("submerged") -> {
-                category = IncidentCategory.FLOODING
-                priority = IncidentSeverity.HIGH
-                department = "Municipal Drainage & Stormwater Management"
-                reasoning = "Surface water accumulation indicates stormwater conduit throttling or silt obstruction."
-                precaution = "Avoid wading through standing water due to unseen open drains and submerged electrical conduits."
-                confidence = 95
-            }
-            lower.contains("pipe") || lower.contains("water burst") || lower.contains("leak") || lower.contains("pipeline") -> {
-                category = IncidentCategory.WATER_BURST
-                priority = IncidentSeverity.HIGH
-                department = "WATCO Smart Water Distribution Division"
-                reasoning = "Hydraulic pressure surge detected; risk of road subgrade erosion and potable water contamination."
-                precaution = "Do not drive over saturated soil near the rupture point."
-                confidence = 93
-            }
-            lower.contains("pothole") || lower.contains("road") || lower.contains("crater") || lower.contains("asphalt") || lower.contains("crack") -> {
-                category = IncidentCategory.POTHOLES
-                priority = IncidentSeverity.HIGH
-                department = "Municipal Road Infrastructure & Pavement Works"
-                reasoning = "Sub-base asphalt fatigue poses structural hazard to two-wheelers and high-speed transit vehicles."
-                precaution = "Reduce vehicular speed and steer clear of curbside puddle depressions."
-                confidence = 94
-            }
-            lower.contains("garbage") || lower.contains("waste") || lower.contains("trash") || lower.contains("dump") || lower.contains("smell") -> {
-                category = IncidentCategory.GARBAGE
-                priority = IncidentSeverity.MEDIUM
-                department = "Zonal Sanitation & Solid Waste Management"
-                reasoning = "Accumulated organic and recyclable waste exceeds capacity, risking vector multiplication."
-                precaution = "Keep children and domestic pets away from unsegregated commercial dump sites."
-                confidence = 92
-            }
-            lower.contains("light") || lower.contains("dark") || lower.contains("lamp") || lower.contains("wire") -> {
-                category = IncidentCategory.STREETLIGHTS
-                priority = IncidentSeverity.LOW
-                department = "Public Electrical & Smart Lighting Division"
-                reasoning = "Circuit lux anomaly or luminaire diode failure identified along municipal street grid."
-                precaution = "Use pedestrian walkways equipped with functional ambient light."
-                confidence = 90
-            }
-            lower.contains("traffic") || lower.contains("jam") || lower.contains("congestion") || lower.contains("signal") -> {
-                category = IncidentCategory.TRAFFIC
-                priority = IncidentSeverity.MEDIUM
-                department = "Smart Traffic Control & Urban Mobility Cell"
-                reasoning = "Flow throughput bottleneck detected causing intersection queue buildup."
-                precaution = "Follow diversion signage and yield to incoming emergency vehicle sirens."
-                confidence = 91
-            }
-            else -> {
-                category = if (selectedCategoryName != null) {
-                    IncidentCategory.fromDisplayName(selectedCategoryName)
-                } else {
-                    IncidentCategory.OTHER
-                }
-                priority = IncidentSeverity.MEDIUM
-                department = "Bhubaneswar Municipal Grievance Redressal Cell"
-                reasoning = "Categorized via civic keyword matching and municipal triage protocol."
-                precaution = "Proceed with caution around the reported area."
-                confidence = 88
-            }
-        }
-
-        val summary = if (description.isNotBlank()) {
-            description.trim().take(70) + if (description.length > 70) "..." else ""
-        } else {
-            "Civic incident reported at location."
-        }
-
-        return AiAnalysisResult(
-            suggestedCategory = category,
-            incidentSummary = summary,
-            suggestedPriority = priority,
-            recommendedDepartment = department,
-            reasoning = reasoning,
-            confidenceScore = confidence,
-            suggestedPrecaution = precaution
-        )
-    }
-
-    private fun generateOfflineResponse(query: String): String {
-        val lower = query.lowercase()
-        return when {
-            lower.contains("pothole") || lower.contains("report") -> {
-                "### How to Report a Civic Issue in Civic Nexus AI:\n\n" +
-                "1. **Tap the 'Report' tab** in the bottom navigation bar.\n" +
-                "2. **Select Category** (e.g., Potholes, Flooding, Garbage).\n" +
-                "3. **Enter Details**: Provide a clear description and attach a live camera snapshot.\n" +
-                "4. **AI Analysis**: Tap **'Analyze with Civic AI'** to automatically verify priority, department routing, and risk level.\n" +
-                "5. **Submit**: Receive your instant Reference Number (e.g., `CN-2026-XXXX`) and track resolution in real-time under **My Complaints**."
-            }
-            lower.contains("cn-") || lower.contains("status") || lower.contains("1042") || lower.contains("0985") -> {
-                "### Complaint Status Query:\n\n" +
-                "- **Reference ID:** `CN-2026-1042`\n" +
-                "- **Category:** Potholes & Roads (KIIT Avenue, Patia)\n" +
-                "- **Current Status:** 🟡 **In Progress (Step 4/5)**\n" +
-                "- **Assigned Officer:** Er. Ramesh Mohanty (Senior Works Engineer)\n" +
-                "- **Dispatch Details:** Rapid Patch Unit 03 is on-site with cold-mix asphalt application.\n" +
-                "- **Estimated Completion:** Today, 01:30 PM."
-            }
-            lower.contains("emergency") || lower.contains("help") || lower.contains("number") || lower.contains("police") || lower.contains("hospital") -> {
-                "### Verified Emergency Response Numbers:\n\n" +
-                "- 🚨 **Universal Emergency / Police:** `112`\n" +
-                "- 🚑 **Ambulance & Medical Trauma:** `108`\n" +
-                "- 🚒 **Fire & Disaster Rescue:** `101`\n" +
-                "- 💧 **Water Supply Emergency (WATCO):** `1916`\n" +
-                "- ⚡ **Power Grid Emergency (TPCODL):** `1912`\n" +
-                "- 🏛️ **Bhubaneswar Municipal Control:** `1800-345-0061`\n\n" +
-                "*(You can also access one-tap direct dialing in the **Emergency** center on the Home screen)*"
-            }
-            lower.contains("self-healing") || lower.contains("self healing") || lower.contains("nexus") || lower.contains("ai work") -> {
-                "### How the Self-Healing City AI Works:\n\n" +
-                "**Civic Nexus AI** operates as the city's unified cognitive nervous system:\n\n" +
-                "1. **Continuous Telemetry:** Ingests live data from smart water sensors, CCTV optical flow, bin capacity beacons, and citizen reports.\n" +
-                "2. **Automated Triage:** AI classifies severity, isolates sub-grid failures, and routes tasks to the appropriate department.\n" +
-                "3. **Autonomous Remediation:** Coordinates smart traffic signals (green-wave corridor) and stormwater pumps before human escalation.\n" +
-                "4. **Citizen Verification:** Transparent multi-stage timeline ensuring accountability until physical remediation is verified."
-            }
-            lower.contains("garbage") || lower.contains("waste") -> {
-                "### City Waste Management & Reporting Guidelines:\n\n" +
-                "- **Segregation:** Green bin for organic/wet waste, Blue bin for dry recyclables, Red bin for hazardous waste.\n" +
-                "- **Overflow Reporting:** Take a photo showing the bin location and street name.\n" +
-                "- **Service Level Agreement:** Municipal compactors are routed to clear reported overflowing bins within **3 hours**."
-            }
-            else -> {
-                "I am here to assist with all municipal services in the **Civic Nexus AI** ecosystem.\n\n" +
-                "You can ask me to:\n" +
-                "• Check the status of your complaints (e.g. 'Status of CN-2026-1042')\n" +
-                "• Guide you through reporting hazards, road defects, or sanitation issues\n" +
-                "• Look up verified emergency and ambulance helplines\n" +
-                "• Explain how smart-city self-healing and multi-agency coordination works\n\n" +
-                "What would you like assistance with?"
-            }
         }
     }
 
@@ -395,8 +418,8 @@ class GeminiAiService {
             val desc = json.optString("improvedDescription", originalDraft)
             val catStr = json.optString("suggestedCategory", userCategory ?: "Other Civic Issue")
             val prioStr = json.optString("suggestedPriority", "Medium")
-            val reason = json.optString("priorityReasoning", "Recommended based on civic engineering hazard assessment.")
-            val missing = json.optString("missingDetailsAdvice", "Consider mentioning the nearest landmark and how long the issue has persisted.")
+            val reason = json.optString("priorityReasoning", "Recommended based on civic engineering assessment.")
+            val missing = json.optString("missingDetailsAdvice", "Consider mentioning nearest landmarks.")
 
             val category = IncidentCategory.fromDisplayName(catStr)
             val priority = when (prioStr.uppercase()) {
@@ -419,11 +442,106 @@ class GeminiAiService {
         }
     }
 
+    private fun performOfflineAnalysis(
+        description: String,
+        selectedCategoryName: String?
+    ): AiAnalysisResult {
+        val lower = description.lowercase()
+        val category: IncidentCategory
+        val priority: IncidentSeverity
+        val department: String
+        val reasoning: String
+        val precaution: String
+        val confidence: Int
+
+        when {
+            lower.contains("pothole") || lower.contains("crater") || lower.contains("road") || lower.contains("asphalt") -> {
+                category = IncidentCategory.POTHOLES
+                priority = if (lower.contains("deep") || lower.contains("accident") || lower.contains("severe")) IncidentSeverity.HIGH else IncidentSeverity.MEDIUM
+                department = "Roads & Bridges Maintenance Division"
+                reasoning = "Surface crater detected with potential vehicular destabilization risk."
+                precaution = "Slow down vehicular speed and avoid abrupt steering maneuvers."
+                confidence = 94
+            }
+            lower.contains("garbage") || lower.contains("waste") || lower.contains("trash") || lower.contains("bin") || lower.contains("dump") -> {
+                category = IncidentCategory.GARBAGE
+                priority = if (lower.contains("stink") || lower.contains("overflow") || lower.contains("maggot")) IncidentSeverity.HIGH else IncidentSeverity.MEDIUM
+                department = "Solid Waste & Public Sanitation Cell"
+                reasoning = "Uncollected municipal refuse accumulating with public hygiene implications."
+                precaution = "Maintain safe distance to prevent biohazard exposure."
+                confidence = 91
+            }
+            lower.contains("flood") || lower.contains("drain") || lower.contains("waterlog") || lower.contains("sewer") -> {
+                category = IncidentCategory.FLOODING
+                priority = if (lower.contains("deep") || lower.contains("enter") || lower.contains("house")) IncidentSeverity.CRITICAL else IncidentSeverity.HIGH
+                department = "Stormwater Drainage & Flood Control Cell"
+                reasoning = "Hydraulic drainage bottleneck posing structural waterlogging risk."
+                precaution = "Avoid walking through standing murky water due to hidden open manholes."
+                confidence = 89
+            }
+            lower.contains("light") || lower.contains("dark") || lower.contains("lamp") || lower.contains("streetlight") -> {
+                category = IncidentCategory.STREETLIGHTS
+                priority = IncidentSeverity.MEDIUM
+                department = "Public Lighting & Electrical Works"
+                reasoning = "Luminaire failure causing low-visibility night hazard."
+                precaution = "Use auxiliary flashlight while traversing this public corridor."
+                confidence = 95
+            }
+            lower.contains("pipe") || lower.contains("burst") || lower.contains("leak") || lower.contains("drinking water") -> {
+                category = IncidentCategory.WATER_BURST
+                priority = IncidentSeverity.HIGH
+                department = "Water Corporation Supply & Maintenance Wing"
+                reasoning = "Potable water pressure breach causing treated water wastage."
+                precaution = "Exercise caution due to potential soil cavitation."
+                confidence = 92
+            }
+            lower.contains("fire") || lower.contains("smoke") || lower.contains("flame") || lower.contains("spark") -> {
+                category = IncidentCategory.FIRE
+                priority = IncidentSeverity.CRITICAL
+                department = "Fire Safety & Emergency Disaster Operations"
+                reasoning = "Thermal hazard with rapid escalation potential."
+                precaution = "Evacuate upwind immediately and maintain 100m perimeter."
+                confidence = 98
+            }
+            lower.contains("traffic") || lower.contains("jam") || lower.contains("signal") || lower.contains("congestion") -> {
+                category = IncidentCategory.TRAFFIC
+                priority = IncidentSeverity.MEDIUM
+                department = "Traffic Engineering & Transit Management"
+                reasoning = "Vehicular choke point hindering arterial thoroughfare."
+                precaution = "Utilize secondary peripheral bypass corridors."
+                confidence = 87
+            }
+            else -> {
+                category = if (selectedCategoryName != null) IncidentCategory.fromDisplayName(selectedCategoryName) else IncidentCategory.OTHER
+                priority = IncidentSeverity.MEDIUM
+                department = "Municipal Grievance Redressal Cell"
+                reasoning = "Categorized via standard municipal triage protocol."
+                precaution = "Proceed with caution around reported location."
+                confidence = 85
+            }
+        }
+
+        val summary = if (description.isNotBlank()) {
+            description.trim().take(70) + if (description.length > 70) "..." else ""
+        } else {
+            "Civic incident reported at location."
+        }
+
+        return AiAnalysisResult(
+            suggestedCategory = category,
+            incidentSummary = summary,
+            suggestedPriority = priority,
+            recommendedDepartment = department,
+            reasoning = reasoning,
+            confidenceScore = confidence,
+            suggestedPrecaution = precaution
+        )
+    }
+
     private fun performOfflineDraftImprovement(
         draftText: String,
         category: String?
     ): AiDraftSuggestion {
-        val lower = draftText.lowercase()
         val offlineAnalysis = performOfflineAnalysis(draftText, category)
 
         val generatedTitle: String
@@ -444,17 +562,17 @@ class GeminiAiService {
             IncidentCategory.FLOODING -> {
                 generatedTitle = "Severe Stormwater Drain Clog & Waterlogging"
                 polishedDescription = "Drainage obstruction causing standing water accumulation. $draftText. Poses structural and hygiene concerns requiring municipal desilting."
-                missingDetails = "Note the approximate water depth and if nearby residential ground floors are threatened."
+                missingDetails = "Note approximate water depth and if nearby ground floors are affected."
             }
             IncidentCategory.STREETLIGHTS -> {
                 generatedTitle = "Non-Functional Streetlight on Public Corridor"
-                polishedDescription = "Public lighting malfunction causing dark stretch on public roadway. $draftText. Requires public electrical maintenance."
+                polishedDescription = "Public lighting malfunction causing dark stretch on roadway. $draftText. Requires municipal electrical inspection."
                 missingDetails = "Provide the nearest pole number or landmark building opposite the fixture."
             }
             IncidentCategory.WATER_BURST -> {
                 generatedTitle = "Potable Water Pipeline Rupture"
-                polishedDescription = "High-pressure municipal pipeline leakage causing potable water loss and road erosion. $draftText. Requires emergency valve isolation."
-                missingDetails = "Indicate if water pressure in nearby houses has dropped or if road foundation is caving in."
+                polishedDescription = "High-pressure municipal pipeline leakage causing treated water loss. $draftText. Requires emergency valve isolation."
+                missingDetails = "Indicate if water pressure in nearby houses has dropped."
             }
             IncidentCategory.FIRE -> {
                 generatedTitle = "Combustion and Thermal Fire Hazard"
@@ -463,12 +581,12 @@ class GeminiAiService {
             }
             IncidentCategory.TRAFFIC -> {
                 generatedTitle = "Severe Traffic Chokepoint & Signal Malfunction"
-                polishedDescription = "Vehicular congestion and traffic flow bottleneck reported. $draftText. Requires traffic management intervention."
+                polishedDescription = "Vehicular congestion bottleneck reported. $draftText. Requires traffic management intervention."
                 missingDetails = "State which intersection approaches are gridlocked."
             }
             else -> {
                 generatedTitle = draftText.take(45).ifBlank { "Civic Infrastructure Issue" }
-                polishedDescription = "Citizen civic report: $draftText. Requires municipal inspection and appropriate departmental assignment."
+                polishedDescription = "Citizen civic report: $draftText. Requires municipal inspection and departmental assignment."
                 missingDetails = "Add specific landmarks, street number, and how many days this issue has been observed."
             }
         }

@@ -150,8 +150,11 @@ data class ChatMessage(
     val isUser: Boolean,
     val timestamp: String,
     val isAiThinking: Boolean = false,
+    val isError: Boolean = false,
+    val retryPrompt: String? = null,
     val suggestedActions: List<String> = emptyList(),
-    val isGeminiPowered: Boolean = false
+    val isGeminiPowered: Boolean = false,
+    val isOfflineGuidance: Boolean = false
 )
 
 data class CityPulseStats(
@@ -215,10 +218,17 @@ data class AuthUiState(
 
 enum class MainNavigationTab(val label: String) {
     HOME("Home"),
-    MAP("City Map"),
-    REPORT("Report"),
+    EXPLORE("Explore"),
+    COMPLAINTS("My Complaints"),
     ASSISTANT("AI Copilot"),
-    PROFILE("Profile")
+    PROFILE("Profile"),
+    NOTIFICATIONS("Notifications");
+
+    companion object {
+        val MAP = EXPLORE
+        val REPORT = COMPLAINTS
+        val COPILOT = ASSISTANT
+    }
 }
 
 enum class AppThemeMode(val displayName: String) {

@@ -14,7 +14,22 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() &&
         (request.auth.token.role == 'admin' ||
-         request.auth.token.email.matches('.*@admin\\.civicnexus\\.gov\\.in'));
+         (request.auth.token.email != null && request.auth.token.email.matches('.*@admin\\.civicnexus\\.gov\\.in')));
+    }
+
+    // Citizen Profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      // Citizen can only write their own profile and cannot elevate role
+      allow create, update: if isOwner(userId) &&
+        (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role == 'citizen' || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // User-scoped notifications
+    match /users/{userId}/notifications/{notificationId} {
+      allow read, update: if isOwner(userId) || isAdmin();
+      allow create, delete: if isAdmin();
     }
 
     // Global Complaints Collection
@@ -25,9 +40,11 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         isAuthenticated() &&
         (
-          // Citizen allowed to reopen their own complaint or add citizen feedback
+          // Citizen allowed to reopen their own complaint or add feedback, but cannot change ownership or resolve
           resource.data.userId == request.auth.uid &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastNote', 'updatedAt', 'timelineJson'])
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastNote', 'updatedAt', 'timelineJson']) &&
+          request.resource.data.status in ['REOPENED', resource.data.status]
         )
       );
       allow delete: if isAdmin();
@@ -44,7 +61,10 @@ service cloud.firestore {
       // Allow community confirmation / upvoting
       allow update: if isAuthenticated() && (
         isAdmin() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verifiedCount'])
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['verifiedCount']) &&
+          request.resource.data.verifiedCount == resource.data.verifiedCount + 1
+        )
       );
       allow create, delete: if isAdmin();
     }

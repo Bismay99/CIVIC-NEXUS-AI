@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "UserProfile": {
+      "collection": "users",
+      "fields": {
+        "uid": { "type": "string", "required": true },
+        "name": { "type": "string", "required": true },
+        "email": { "type": "string", "required": false },
+        "citizenId": { "type": "string", "required": true },
+        "role": { "type": "string", "required": true },
+        "trustScore": { "type": "number", "required": false },
+        "reportsCount": { "type": "number", "required": false },
+        "resolvedCount": { "type": "number", "required": false },
+        "impactPoints": { "type": "number", "required": false },
+        "createdAt": { "type": "string", "required": false },
+        "updatedAt": { "type": "string", "required": false }
+      }
+    },
+    "Complaint": {
+      "collection": "complaints",
+      "fields": {
+        "referenceId": { "type": "string", "required": true },
+        "userId": { "type": "string", "required": true },
+        "category": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "description": { "type": "string", "required": true },
+        "hasPhoto": { "type": "boolean", "required": false },
+        "photoName": { "type": "string", "required": false },
+        "latitude": { "type": "number", "required": true },
+        "longitude": { "type": "number", "required": true },
+        "address": { "type": "string", "required": true },
+        "submittedDate": { "type": "string", "required": true },
+        "status": { "type": "string", "required": true },
+        "timelineJson": { "type": "string", "required": false },
+        "assignedOfficer": { "type": "string", "required": false },
+        "aiAnalysisJson": { "type": "string", "required": false },
+        "updatedAt": { "type": "number", "required": false }
+      }
+    },
+    "Incident": {
+      "collection": "incidents",
+      "fields": {
+        "title": { "type": "string", "required": true },
+        "category": { "type": "string", "required": true },
+        "severity": { "type": "string", "required": true },
+        "status": { "type": "string", "required": true },
+        "locationName": { "type": "string", "required": true },
+        "latitude": { "type": "number", "required": true },
+        "longitude": { "type": "number", "required": true },
+        "description": { "type": "string", "required": true },
+        "reportedTime": { "type": "string", "required": true },
+        "department": { "type": "string", "required": true },
+        "verifiedCount": { "type": "number", "required": true },
+        "isSimulated": { "type": "boolean", "required": false }
+      }
+    },
+    "Notification": {
+      "collection": "users/{userId}/notifications",
+      "fields": {
+        "id": { "type": "string", "required": true },
+        "title": { "type": "string", "required": true },
+        "message": { "type": "string", "required": true },
+        "category": { "type": "string", "required": true },
+        "timestamp": { "type": "string", "required": true },
+        "isRead": { "type": "boolean", "required": true }
+      }
+    }
+  }
+}

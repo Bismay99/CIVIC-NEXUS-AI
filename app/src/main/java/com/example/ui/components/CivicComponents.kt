@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.outlined.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -200,6 +203,7 @@ fun CivicTopAppBar(
 @Composable
 fun CivicBottomNavigation(
     currentTab: MainNavigationTab,
+    unreadNotifCount: Int = 0,
     onTabSelected: (MainNavigationTab) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -237,9 +241,9 @@ fun CivicBottomNavigation(
         ) {
             val tabs = listOf(
                 Triple(MainNavigationTab.HOME, Icons.Default.Home, Icons.Outlined.Home),
-                Triple(MainNavigationTab.MAP, Icons.Default.Map, Icons.Outlined.Map),
-                Triple(MainNavigationTab.REPORT, Icons.Default.AddCircle, Icons.Outlined.AddCircleOutline),
-                Triple(MainNavigationTab.ASSISTANT, Icons.Default.Psychology, Icons.Outlined.Psychology),
+                Triple(MainNavigationTab.EXPLORE, Icons.Default.Explore, Icons.Outlined.Explore),
+                Triple(MainNavigationTab.COMPLAINTS, Icons.AutoMirrored.Filled.Assignment, Icons.AutoMirrored.Filled.Assignment),
+                Triple(MainNavigationTab.ASSISTANT, Icons.Default.SmartToy, Icons.Outlined.SmartToy),
                 Triple(MainNavigationTab.PROFILE, Icons.Default.Person, Icons.Outlined.PersonOutline)
             )
 
@@ -249,17 +253,38 @@ fun CivicBottomNavigation(
                     selected = isSelected,
                     onClick = { onTabSelected(tab) },
                     icon = {
-                        Icon(
-                            imageVector = if (isSelected) filledIcon else outlinedIcon,
-                            contentDescription = tab.label
-                        )
+                        if (tab == MainNavigationTab.NOTIFICATIONS && unreadNotifCount > 0) {
+                            BadgedBox(
+                                badge = {
+                                    Badge(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ) {
+                                        Text(text = unreadNotifCount.toString(), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (isSelected) filledIcon else outlinedIcon,
+                                    contentDescription = tab.label
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = if (isSelected) filledIcon else outlinedIcon,
+                                contentDescription = tab.label
+                            )
+                        }
                     },
                     label = {
                         Text(
                             text = tab.label,
                             style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 10.sp
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     },
                     colors = NavigationBarItemDefaults.colors(

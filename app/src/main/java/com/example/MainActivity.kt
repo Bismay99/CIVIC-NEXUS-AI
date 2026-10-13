@@ -131,13 +131,15 @@ fun CivicNexusApp(viewModel: CivicNexusViewModel) {
                     is SubScreen.MyComplaints -> {
                         ComplaintsScreen(
                             viewModel = viewModel,
-                            onBack = { viewModel.closeSubScreen() }
+                            onBack = { viewModel.closeSubScreen() },
+                            onNavigateToReport = { viewModel.openSubScreen(SubScreen.ReportIssue) }
                         )
                     }
                     is SubScreen.ComplaintDetail -> {
                         ComplaintsScreen(
                             viewModel = viewModel,
-                            onBack = { viewModel.closeSubScreen() }
+                            onBack = { viewModel.closeSubScreen() },
+                            onNavigateToReport = { viewModel.openSubScreen(SubScreen.ReportIssue) }
                         )
                     }
                     is SubScreen.Notifications -> {
@@ -146,28 +148,58 @@ fun CivicNexusApp(viewModel: CivicNexusViewModel) {
                             onBack = { viewModel.closeSubScreen() }
                         )
                     }
+                    is SubScreen.ReportIssue -> {
+                        ReportScreen(
+                            viewModel = viewModel,
+                            onBack = { viewModel.closeSubScreen() }
+                        )
+                    }
+                    is SubScreen.AiAssistant -> {
+                        AiAssistantScreen(
+                            viewModel = viewModel,
+                            onNavigateToReport = {
+                                viewModel.closeSubScreen()
+                                viewModel.openSubScreen(SubScreen.ReportIssue)
+                            },
+                            onBack = { viewModel.closeSubScreen() }
+                        )
+                    }
                     is SubScreen.None -> {
                         when (currentTab) {
                             MainNavigationTab.HOME -> {
                                 HomeScreen(
                                     viewModel = viewModel,
-                                    onNavigateToReport = { viewModel.selectTab(MainNavigationTab.REPORT) },
-                                    onNavigateToMap = { viewModel.selectTab(MainNavigationTab.MAP) },
+                                    onNavigateToReport = { viewModel.openSubScreen(SubScreen.ReportIssue) },
+                                    onNavigateToMap = { viewModel.selectTab(MainNavigationTab.EXPLORE) },
                                     onNavigateToAssistant = { viewModel.selectTab(MainNavigationTab.ASSISTANT) },
                                     onOpenEmergency = { viewModel.openSubScreen(SubScreen.EmergencyCenter) },
-                                    onOpenComplaints = { viewModel.openSubScreen(SubScreen.MyComplaints) }
+                                    onOpenComplaints = { viewModel.selectTab(MainNavigationTab.COMPLAINTS) }
                                 )
                             }
-                            MainNavigationTab.MAP -> {
-                                MapScreen(viewModel = viewModel)
+                            MainNavigationTab.EXPLORE -> {
+                                MapScreen(
+                                    viewModel = viewModel,
+                                    onNavigateToReport = { viewModel.openSubScreen(SubScreen.ReportIssue) }
+                                )
                             }
-                            MainNavigationTab.REPORT -> {
-                                ReportScreen(viewModel = viewModel)
+                            MainNavigationTab.COMPLAINTS -> {
+                                ComplaintsScreen(
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.selectTab(MainNavigationTab.HOME) },
+                                    onNavigateToReport = { viewModel.openSubScreen(SubScreen.ReportIssue) }
+                                )
                             }
                             MainNavigationTab.ASSISTANT -> {
                                 AiAssistantScreen(
                                     viewModel = viewModel,
-                                    onNavigateToReport = { viewModel.selectTab(MainNavigationTab.REPORT) }
+                                    onNavigateToReport = { viewModel.openSubScreen(SubScreen.ReportIssue) },
+                                    onBack = { viewModel.selectTab(MainNavigationTab.HOME) }
+                                )
+                            }
+                            MainNavigationTab.NOTIFICATIONS -> {
+                                NotificationsScreen(
+                                    viewModel = viewModel,
+                                    onBack = { viewModel.selectTab(MainNavigationTab.HOME) }
                                 )
                             }
                             MainNavigationTab.PROFILE -> {
